@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application'
+}
+android {
+    namespace 'com.kimi.snakegame'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.kimi.snakegame'
+        minSdk 24
+        targetSdk 34
+        versionCode 19
+        versionName '2.8'
+    }
+    signingConfigs {
+        snake {
+            storeFile file('../snake.keystore')
+            storePassword 'snake2026'
+            keyAlias 'snake'
+            keyPassword 'snake2026'
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.snake
+        }
+        release {
+            signingConfig signingConfigs.snake
+        }
+    }
+}

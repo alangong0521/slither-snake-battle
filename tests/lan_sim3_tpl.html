@@ -1,0 +1,94 @@
+<!DOCTYPE html><html><body>
+<div id="log" style="display:none"></div>
+<iframe id="A" src="__FB_PATH__" width="400" height="260"></iframe>
+<iframe id="B" src="__FB_PATH__" width="400" height="260"></iframe>
+<iframe id="C" src="__FB_PATH__" width="400" height="260"></iframe>
+<script>
+// 三人联机仿真: A=主机 B/C=客机, 父页面做消息中继(模拟 TCP 桥)
+var frames={0:document.getElementById('A'),1:document.getElementById('B'),2:document.getElementById('C')};
+function slog(s){document.getElementById('log').textContent+=s+'\n';console.log(s);}
+function idOf(w){if(w===frames[0].contentWindow)return 0;if(w===frames[1].contentWindow)return 1;if(w===frames[2].contentWindow)return 2;return -1;}
+window.addEventListener('message',function(e){
+  if(!(e.data&&e.data.lan))return;
+  var sid=idOf(e.source);if(sid<0)return;
+  var out={lan:1,from:sid,msg:e.data.msg};
+  if(sid===0){
+    if(e.data.to!==undefined){var f=frames[e.data.to];if(f)f.contentWindow.postMessage(out,'*');}
+    else{for(var i=1;i<=2;i++)frames[i].contentWindow.postMessage(out,'*');}
+  }else{
+    frames[0].contentWindow.postMessage(out,'*');
+  }
+});
+var t0=Date.now();
+function clickJoin(fid,name){
+  var w=frames[fid].contentWindow;
+  w.document.getElementById('nameInput').value=name;
+  w.document.getElementById('joinBtn').click();
+  setTimeout(function(){try{w.document.getElementById('ipInput').value='10.0.0.1';w.document.getElementById('connBtn').click();slog('[SIM] '+name+' join clicked');}catch(e){slog('[SIM] joinerr '+e.message);}},400);
+}
+function step(){
+  var t=(Date.now()-t0)/1000;
+  try{
+    if(t>1&&!window.__s1){window.__s1=1;var aw=frames[0].contentWindow;aw.document.getElementById('nameInput').value='主机';aw.document.getElementById('hostBtn').click();slog('[SIM] A host clicked');}
+    if(t>2.5&&!window.__s2){window.__s2=1;clickJoin(1,'客机B');}
+    if(t>4&&!window.__s3){window.__s3=1;clickJoin(2,'客机C');}
+    if(t>6&&!window.__s4){window.__s4=1;frames[0].contentWindow.document.getElementById('startBtn').click();slog('[SIM] A start clicked');}
+    if(t>8&&!window.__s5){window.__s5=1;
+      for(var i=1;i<=2;i++){var w=frames[i].contentWindow;slog('[SIM] client'+i+' autoEntered='+w.__G.LAN.entered);}
+    }
+    if(t>9&&!window.__s6){window.__s6=1;
+      var aw=frames[0].contentWindow,bw=frames[1].contentWindow,cw=frames[2].contentWindow;
+      slog('[SIM] A snakes='+aw.__G.snakes.length+' remotes='+Object.keys(aw.__G.remotes).length+' snapsSent='+aw.__G.LAN.snapSent);
+      slog('[SIM] B ownIdx='+bw.__G.LAN.ownIdx+' snakes='+bw.__G.snakes.length+' snaps='+bw.__G.LAN.snapRecv+' alive='+(bw.__G.player.alive?1:0));
+      slog('[SIM] C ownIdx='+cw.__G.LAN.ownIdx+' snakes='+cw.__G.snakes.length+' snaps='+cw.__G.LAN.snapRecv+' alive='+(cw.__G.player.alive?1:0)+' name='+cw.__G.player.name);
+      var names=['A','B','C'];
+      for(var fi=0;fi<3;fi++){var w2=frames[fi].contentWindow;
+        var info='';for(var si=0;si<w2.__G.snakes.length;si++){var sn=w2.__G.snakes[si];if(sn.isHuman||sn.isPlayer)info+=' '+sn.name+':'+sn.pts.length+'pt@'+Math.round(sn.pts[0]?sn.pts[0].x:-999)+','+Math.round(sn.pts[0]?sn.pts[0].y:-999)+(sn.alive?'':'(死)');}
+        slog('[SIM] '+names[fi]+' humans:'+info);
+      }
+    }
+    if(t>9.5&&!window.__s65){window.__s65=1;
+      var cw2=frames[2].contentWindow,aw2=frames[0].contentWindow;
+      var cHost=aw2.__G.remotes[2]; // 以主机视角中C蛇的头为准(快照同步以它为中心)
+      var ks=null;for(var i2=0;i2<aw2.__G.snakes.length;i2++){var s=aw2.__G.snakes[i2];if(s.alive&&!s.isPlayer&&!s.remote){ks=s;break;}}
+      if(ks&&cHost&&cHost.pts&&cHost.pts.length){
+        var kh={x:cHost.pts[0].x+150,y:cHost.pts[0].y};
+        ks.grace=0;ks.pts=[];for(var ki=0;ki<600;ki++)ks.pts.push({x:kh.x+ki*0.6,y:kh.y+Math.sin(ki*0.05)*80});
+        ks.trail=ks.pts.map(function(q){return{x:q.x,y:q.y};});ks.vlen=600;
+        aw2.__G.die(ks,aw2.__G.player);
+        slog('[SIM] forced kill near C, host foods='+aw2.__G.foods.length);
+      }else slog('[SIM] kill setup failed');
+    }
+    if(t>11.5&&!window.__s7){window.__s7=1;
+      var cw3=frames[2].contentWindow;
+      var ch=cw3.__G.player.pts[0];
+      var near=0;for(var i=0;i<cw3.__G.foods.length;i++){var f=cw3.__G.foods[i];if(Math.abs(f.x-ch.x)<450&&Math.abs(f.y-ch.y)<280)near++;}
+      slog('[SIM] C foods='+cw3.__G.foods.length+' nearC='+near+' C snaps='+cw3.__G.LAN.snapRecv+' C alive='+(cw3.__G.player.alive?1:0));
+      slog('[SIM] B snaps='+frames[1].contentWindow.__G.LAN.snapRecv);
+    }
+    if(t>13&&!window.__s75){window.__s75=1;
+      frames[1].contentWindow.document.getElementById('pauseBtn').click();
+      window.__tk0=frames[0].contentWindow.__G.tickN;
+      slog('[SIM] B clicked pause');
+    }
+    if(t>14.5&&!window.__s76){window.__s76=1;
+      var pA=frames[0].contentWindow.__G.paused,pB=frames[1].contentWindow.__G.paused,pC=frames[2].contentWindow.__G.paused;
+      var tkA=frames[0].contentWindow.__G.tickN,tkC=frames[2].contentWindow.__G.tickN;
+      window.__tkC0=tkC;
+      slog('[SIM] pauseSync paused A/B/C='+pA+'/'+pB+'/'+pC+' tickAfrozen='+(tkA-window.__tk0<=1));
+    }
+    if(t>16&&!window.__s77){window.__s77=1;
+      frames[2].contentWindow.document.getElementById('pauseBtn').click();
+      slog('[SIM] C clicked resume');
+    }
+    if(t>17.5&&!window.__s78){window.__s78=1;
+      var pA2=frames[0].contentWindow.__G.paused,pB2=frames[1].contentWindow.__G.paused,pC2=frames[2].contentWindow.__G.paused;
+      var tkC2=frames[2].contentWindow.__G.tickN;
+      slog('[SIM] resumeSync paused A/B/C='+pA2+'/'+pB2+'/'+pC2+' tickCresumed='+(tkC2-window.__tkC0>10));
+      slog('[SIM] done');
+    }
+  }catch(e){slog('[SIM] err '+e.message+' | '+(e.stack||'').split('\n')[1]);}
+  if(t<20)setTimeout(step,200);
+}
+setTimeout(step,500);
+</script></body></html>
