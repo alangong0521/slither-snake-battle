@@ -69,10 +69,14 @@ slog('[TEST] multitouch skill fz='+((player.fzT||0)>tickN?1:0));
 joy.dispatchEvent(new PointerEvent('pointerup',{pointerId:11,bubbles:true}));
 }catch(e){slog('[TEST] mt err '+e.message);}}
 if(tickN===59){player.score=26;} // 视野测量前固定分数, 保证不同设备 z0 一致
+if(tickN===700&&window.__SPAWNTEST__){var ts3=snakes[3];ts3.alive=false;ts3.respawn=2;window.__spawnCk=ts3;}
+if(tickN>704&&window.__SPAWNTEST__&&window.__spawnCk&&window.__spawnCk.alive){var sd=dist(window.__spawnCk.pts[0].x,window.__spawnCk.pts[0].y,player.pts[0].x,player.pts[0].y);slog('[TEST] spawnDist='+Math.round(sd));window.__spawnCk=null;}
+if(tickN===800&&window.__CHAINTEST__){var kl=snakes[4];kl.alive=true;kl.killChain=0;kl.lastKillT=-9999;for(var ci=5;ci<11&&ci<snakes.length;ci++){var vt=snakes[ci];vt.alive=true;vt.grace=0;vt.pts=[];for(var vi=0;vi<10;vi++)vt.pts.push({x:1500+vi*5,y:1500});vt.trail=vt.pts.map(function(q){return{x:q.x,y:q.y};});die(vt,kl);}slog('[TEST] chainCap chain='+kl.killChain);}
 """
     g = src.replace('<body>', '<body><script>window.__AUTOPILOT__=true;window.__FORCE_FB__=true;'
         'window.__EATTEST__=true;window.__AURATEST__=true;window.__HEADTEST__=true;'
-        'window.__POWTEST__=true;window.__BODYTEST__=true;window.__SKZOOM__=true;window.__MTTEST__=true;</script>', 1)
+        'window.__POWTEST__=true;window.__BODYTEST__=true;window.__SKZOOM__=true;window.__MTTEST__=true;'
+        'window.__SPAWNTEST__=true;window.__CHAINTEST__=true;</script>', 1)
     g = g.replace('if(window.__EATTEST__){', probes + '\nif(window.__EATTEST__){', 1)
     open(os.path.join(WORK, 'g.html'), 'w', encoding='utf-8').write(g)
     # ---- 联机节点页 ----
@@ -112,6 +116,10 @@ def solo_tests():
     check('T14', '小蛇穿千分大蛇身体必死', 'bodycross smallAlive=0' in joined)
     check('T15', '历史最高分保存', 'hs count=1' in joined)
     check('T16', '运行无JS异常', len(errs) == 0, ';'.join(errs[:3]))
+    m = re.search(r'spawnDist=(\d+)', joined)
+    check('T30', '重生点远离玩家(≥950px)', m and int(m.group(1)) >= 950, m.group(0) if m else '无日志')
+    m = re.search(r'chainCap chain=(\d+)', joined)
+    check('T31', '连杀奖励封顶(≤5级)', m and int(m.group(1)) <= 5, m.group(0) if m else '无日志')
 
 def view_tests():
     vals = []
@@ -146,7 +154,7 @@ def lan_tests():
     check('T21', '主机建房+两客机加入(remotes=2)', 'remotes=2' in joined)
     check('T22', '第三玩家真正入局(ownIdx=11)', 'C ownIdx=11' in joined)
     check('T23', '从机免确认自动进入', joined.count('autoEntered=true') >= 2)
-    check('T24', '快照15Hz持续下发', bool(re.search(r'B snaps=1\d\d', joined)))
+    check('T24', '快照10Hz持续下发', bool(re.search(r'B snaps=([4-9]\d|\d{3,})', joined)))
     for f in ['A', 'B', 'C']:
         m = re.search(f + r' humans:(.*)', joined)
         ok = m and all((n + ':') in m.group(1) for n in ['主机', '客机B', '客机C']) and 'pt@-999' not in m.group(1)
@@ -158,6 +166,8 @@ def lan_tests():
     check('T28', '任意玩家恢复全场继续', 'resumeSync paused A/B/C=false/false/false tickCresumed=true' in joined)
     errs = [l for l in logs if l.startswith('[ERR]')]
     check('T29', '联机运行无JS异常', len(errs) == 0, ';'.join(errs[:3]))
+    m = re.search(r'C ftween=(\d+)', joined)
+    check('T32', '客机豆子平滑补间(带目标点)', m and int(m.group(1)) > 0, m.group(0) if m else '无日志')
 
 def main():
     print('== 生成测试页(基于当前 index.html) ==')

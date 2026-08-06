@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='2.9';
+var VERSION='3.0';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -131,14 +131,20 @@ function mkSnake(name,color,isPlayer){
 var s={name:name,color:color,isPlayer:!!isPlayer,pts:[],trail:[],aggro:rnd(0.2,0.6),vlen:26,angle:rnd(0,Math.PI*2),tAngle:0,score:26,kills:0,alive:true,boost:false,grace:150,aiT:0,aiA:rnd(0,Math.PI*2),respawn:0,deadT:0};
 place(s);return s;
 }
+function farFromHumans(x,y,d){
+for(var k=0;k<snakes.length;k++){var s=snakes[k];if((s.isPlayer||s.isHuman)&&s.alive&&s.pts.length){if(dist(x,y,s.pts[0].x,s.pts[0].y)<d)return false;}}
+return true;
+}
 function place(s){
 var p=null;
-for(var i=0;i<50;i++){var c=randPos(500);if(clearOf(c.x,c.y,320)){p=c;break;}}
+for(var i=0;i<50;i++){var c=randPos(500);if(clearOf(c.x,c.y,320)&&farFromHumans(c.x,c.y,1050)){p=c;break;}}
+if(!p){for(var i3=0;i3<50;i3++){var c2=randPos(600);if(clearOf(c2.x,c2.y,320)){p=c2;break;}}}
 if(!p)p=randPos(600);
 s.pts=[];var n=Math.floor(s.score);
 for(var i2=0;i2<n;i2++)s.pts.push({x:p.x-i2*SP*Math.cos(s.angle),y:p.y-i2*SP*Math.sin(s.angle)});
 s.trail=s.pts.map(function(q){return{x:q.x,y:q.y};});
 s.vlen=Math.floor(s.score);
+s.bornT=tickN;
 }
 function norm(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;}
 var AC=null,sfxOn=true,musOn=true,combo=0,comboT=0,prevPBoost=false;
@@ -247,7 +253,7 @@ var sn=[];
 var rp0=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
 for(var i=0;i<snakes.length;i++){var s=snakes[i];
 var near=rp0&&dist(s.pts[0].x,s.pts[0].y,rp0.x,rp0.y)<2400+s.pts.length*SP;
-var stp=near?(s.pts.length<=220?1:2):Math.max(2,Math.ceil(s.pts.length/160));
+var stp=near?(s.pts.length<=120?1:2):Math.max(2,Math.ceil(s.pts.length/160));
 var pts=[];for(var j=0;j<s.pts.length;j+=stp){pts.push(Math.round(s.pts[j].x));pts.push(Math.round(s.pts[j].y));}
 var tl=s.pts[s.pts.length-1];
 if(pts.length<2||pts[pts.length-2]!==Math.round(tl.x)||pts[pts.length-1]!==Math.round(tl.y)){pts.push(Math.round(tl.x));pts.push(Math.round(tl.y));}
@@ -270,7 +276,7 @@ LAN.snapRecv++;
 if(!LAN.entered)clientEnter();
 for(var i=0;i<m.sn.length;i++){var ms=m.sn[i];var ls=LAN.cSnakes[i];
 if(!ls){
-ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,tgt:null,tgtAngle:ms.g};
+ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,tgt:null,tgtAngle:ms.g,bornT:tickN};
 for(var q=0;q+1<ms.p.length;q+=2)ls.pts.push({x:ms.p[q],y:ms.p[q+1]});
 ls.trail=ls.pts.map(function(z){return{x:z.x,y:z.y};});
 LAN.cSnakes[i]=ls;
@@ -286,8 +292,15 @@ if(!wasAlive&&ls.alive){var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveB
 }
 }
 snakes=LAN.cSnakes;
-foods.length=0;
-for(var j=0;j<m.fd.length;j++){var f=m.fd[j];foods.push({x:f[0],y:f[1],r:f[2]||3,c:SERIES[f[3]>=0?f[3]:0],v:1});}
+for(var j0=0;j0<foods.length;j0++)foods[j0].miss=(foods[j0].miss||0)+1;
+for(var j=0;j<m.fd.length;j++){
+var f=m.fd[j],fx=f[0],fy=f[1];
+var best=null,bd=40*40;
+for(var j4=0;j4<foods.length;j4++){var o=foods[j4];if(!o.miss)continue;var dx=o.x-fx,dy=o.y-fy,dd=dx*dx+dy*dy;if(dd<bd){bd=dd;best=o;}}
+if(best){best.miss=0;best.tx=fx;best.ty=fy;}
+else foods.push({x:fx,y:fy,tx:fx,ty:fy,r:f[2]||3,c:SERIES[f[3]>=0?f[3]:0],v:1,miss:0});
+}
+for(var j5=foods.length-1;j5>=0;j5--)if(foods[j5].miss>1)foods.splice(j5,1);
 if(m.pw){powers.length=0;for(var j2=0;j2<m.pw.length;j2++){var q2=m.pw[j2];powers.push({x:q2[0],y:q2[1],r:10,type:PWT[q2[2]>=0?q2[2]:0]});}}
 if(LAN.ownIdx>=0&&LAN.cSnakes[LAN.ownIdx])player=LAN.cSnakes[LAN.ownIdx];
 }
@@ -307,6 +320,7 @@ if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;
 moveSnake(player);
 if(player.tgt&&player.tgt.length>=2){var hh=player.pts[0];hh.x+=(player.tgt[0]-hh.x)*0.15;hh.y+=(player.tgt[1]-hh.y)*0.15;}
 for(var k=0;k<snakes.length;k++){var s=snakes[k];if(s!==player&&s.alive)blendSnake(s);}
+for(var tf=0;tf<foods.length;tf++){var fo=foods[tf];if(fo.tx!==undefined){fo.x+=(fo.tx-fo.x)*0.35;fo.y+=(fo.ty-fo.y)*0.35;}}
 if(LAN.snapRecv===0&&tickN%90===0)lanSend({t:'hello',n:player.name,c:player.color});
 lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
 if(tickN%20===0)updateHUD();
@@ -460,7 +474,7 @@ for(var i=0;i<s.pts.length;i+=dst)spawnFood(s.pts[i].x+rnd(-6,6),s.pts[i].y+rnd(
 s.magT=s.shdT=s.zmT=s.x5T=s.fzT=0;s.skillN=0;s.killChain=0;
 if(killer&&killer!==s){
 killer.kills++;
-if(tickN-(killer.lastKillT||-9999)<480){killer.killChain=(killer.killChain||0)+1;killer.score+=50*killer.killChain;}
+if(tickN-(killer.lastKillT||-9999)<480){killer.killChain=Math.min(5,(killer.killChain||0)+1);killer.score+=50*killer.killChain;}
 else killer.killChain=1;
 killer.lastKillT=tickN;
 killer.skillN=Math.min(3,(killer.skillN||0)+1);
@@ -536,7 +550,7 @@ while(foods.length<FOOD_N)spawnFood();
 if(tickN%900===450&&powers.length<4)spawnPower();
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
-if(LAN.mode===1&&tickN%4===0){var anyR=false;for(var cid in remotes){lanSendTo(cid,buildSnap(remotes[cid]));anyR=true;}if(anyR)LAN.snapSent++;}
+if(LAN.mode===1&&tickN%6===0){var anyR=false;for(var cid in remotes){lanSendTo(cid,buildSnap(remotes[cid]));anyR=true;}if(anyR)LAN.snapSent++;}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){
@@ -648,6 +662,7 @@ for(var k=0;k<snakes.length;k++){var s=snakes[k];if(!s.alive)continue;
 var h=s.pts[0];
 if(dist(h.x,h.y,focus.x,focus.y)>(vw+vh)+s.pts.length*SP)continue;
 var r=rad(s);
+var bornA=1;if(s.bornT!==undefined&&tickN-s.bornT<40){bornA=0.1+0.9*(tickN-s.bornT)/40;ctx.globalAlpha=bornA;}
 if(s.score>=3000&&s===topSnake){
 var hue0=(tickN*3)%360;
 ctx.lineWidth=r*1.7;
@@ -683,6 +698,7 @@ ctx.fillStyle=C.text;ctx.beginPath();ctx.arc(cx2+ex*r*0.12,cy2+ey*r*0.12,r*0.17,
 }
 ctx.fillStyle=C.text;
 ctx.fillText(s.name,h.x,h.y-r-8);
+if(bornA<1)ctx.globalAlpha=1;
 }
 ctx.restore();
 if(ox>0.5||oy>0.5){ctx.strokeStyle=C.grid;ctx.globalAlpha=0.5;ctx.lineWidth=1;ctx.strokeRect(ox+0.5,oy+0.5,vwPx-1,vhPx-1);ctx.globalAlpha=1;}

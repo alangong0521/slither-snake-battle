@@ -68,6 +68,8 @@ function step(){
       var ch=cw3.__G.player.pts[0];
       var near=0;for(var i=0;i<cw3.__G.foods.length;i++){var f=cw3.__G.foods[i];if(Math.abs(f.x-ch.x)<500&&Math.abs(f.y-ch.y)<320)near++;}
       slog('[SIM] C foods='+cw3.__G.foods.length+' nearC='+near+' C snaps='+cw3.__G.LAN.snapRecv+' C alive='+(cw3.__G.player.alive?1:0));
+      var tw=0;for(var ti=0;ti<cw3.__G.foods.length;ti++){if(cw3.__G.foods[ti].tx!==undefined)tw++;}
+      slog('[SIM] C ftween='+tw);
       slog('[SIM] B snaps='+frames[1].contentWindow.__G.LAN.snapRecv);
     }
     if(t>13&&!window.__s75){window.__s75=1;
