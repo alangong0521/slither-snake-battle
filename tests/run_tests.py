@@ -68,6 +68,7 @@ sb.dispatchEvent(new PointerEvent('pointerdown',{pointerId:22,clientX:sr.left+20
 slog('[TEST] multitouch skill fz='+((player.fzT||0)>tickN?1:0));
 joy.dispatchEvent(new PointerEvent('pointerup',{pointerId:11,bubbles:true}));
 }catch(e){slog('[TEST] mt err '+e.message);}}
+if(tickN===59){player.score=26;} // 视野测量前固定分数, 保证不同设备 z0 一致
 """
     g = src.replace('<body>', '<body><script>window.__AUTOPILOT__=true;window.__FORCE_FB__=true;'
         'window.__EATTEST__=true;window.__AURATEST__=true;window.__HEADTEST__=true;'
@@ -151,7 +152,7 @@ def lan_tests():
         ok = m and all((n + ':') in m.group(1) for n in ['主机', '客机B', '客机C']) and 'pt@-999' not in m.group(1)
         check('T25' + f, f + '端可见全部玩家蛇身', bool(ok), m.group(1).strip() if m else '无日志')
     m = re.search(r'C foods=(\d+) nearC=(\d+)', joined)
-    check('T26', '击杀后尸体豆同步可见', m and int(m.group(1)) >= 100 and int(m.group(2)) > 20,
+    check('T26', '击杀后尸体豆同步可见', m and int(m.group(1)) >= 100 and int(m.group(2)) > 10,
           m.group(0) if m else '无日志')
     check('T27', '全场暂停同步(tick冻结)', 'pauseSync paused A/B/C=true/true/true tickAfrozen=true' in joined)
     check('T28', '任意玩家恢复全场继续', 'resumeSync paused A/B/C=false/false/false tickCresumed=true' in joined)

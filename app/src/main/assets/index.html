@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='2.8';
+var VERSION='2.9';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -540,6 +540,7 @@ if(LAN.mode===1&&tickN%4===0){var anyR=false;for(var cid in remotes){lanSendTo(c
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){
+powers.length=0;
 var A2=snakes[1],B2=snakes[2];
 A2.alive=B2.alive=true;A2.grace=B2.grace=0;A2.score=B2.score=40;A2.vlen=B2.vlen=40;
 A2.angle=0;A2.tAngle=0;A2.aiA=0;B2.angle=Math.PI;B2.tAngle=Math.PI;B2.aiA=Math.PI;A2.aiT=B2.aiT=99999;
@@ -574,7 +575,7 @@ if(tickN===800)window.__lenLog={min:1e9,max:0,chg:0,prev:0};
 if(tickN>800&&tickN<=2000&&window.__lenLog){var LL=window.__lenLog;var L=player.pts.length;if(L<LL.min)LL.min=L;if(L>LL.max)L.max=L;if(LL.prev&&L!==LL.prev)LL.chg++;LL.prev=L;
 if(tickN===2000)slog('[TEST] len min='+LL.min+' max='+LL.max+' changes='+LL.chg);}
 if(!player.alive&&tickN-player.deadT>60)revive();
-if(deaths>0&&!window.__hsLogged){window.__hsLogged=1;var a2=loadHS();slog('[TEST] hs count='+a2.length+' top='+(a2[0]?a2[0].n+':'+a2[0].s:'none')+' audio='+(AC?AC.state:'none')+' mus='+(musTimer?1:0));}
+if((deaths>0||(tickN===1100&&window.__EATTEST__))&&!window.__hsLogged){window.__hsLogged=1;if(deaths===0){recordScore();}var a2=loadHS();slog('[TEST] hs count='+a2.length+' top='+(a2[0]?a2[0].n+':'+a2[0].s:'none')+' audio='+(AC?AC.state:'none')+' mus='+(musTimer?1:0));}
 if(tickN===120){
 var joy=$('joy');var r=joy.getBoundingClientRect();
 joyVec({clientX:r.left+r.width/2+30,clientY:r.top+r.height/2});

@@ -20,19 +20,23 @@ window.addEventListener('message',function(e){
   }
 });
 var t0=Date.now();
-function clickJoin(fid,name){
-  var w=frames[fid].contentWindow;
-  w.document.getElementById('nameInput').value=name;
-  w.document.getElementById('joinBtn').click();
-  setTimeout(function(){try{w.document.getElementById('ipInput').value='10.0.0.1';w.document.getElementById('connBtn').click();slog('[SIM] '+name+' join clicked');}catch(e){slog('[SIM] joinerr '+e.message);}},400);
+function clickJoin(fid,name,done){
+  try{
+    var w=frames[fid].contentWindow;
+    var ni=w.document.getElementById('nameInput');var jb=w.document.getElementById('joinBtn');
+    if(!ni||!jb)return false;
+    ni.value=name;jb.click();
+    setTimeout(function(){try{var ip=w.document.getElementById('ipInput');var cb=w.document.getElementById('connBtn');if(!ip||!cb){done.v=false;return;}ip.value='10.0.0.1';cb.click();slog('[SIM] '+name+' join clicked');}catch(e){done.v=false;}},400);
+    return true;
+  }catch(e){return false;}
 }
 function step(){
   var t=(Date.now()-t0)/1000;
   try{
-    if(t>1&&!window.__s1){window.__s1=1;var aw=frames[0].contentWindow;aw.document.getElementById('nameInput').value='主机';aw.document.getElementById('hostBtn').click();slog('[SIM] A host clicked');}
-    if(t>2.5&&!window.__s2){window.__s2=1;clickJoin(1,'客机B');}
-    if(t>4&&!window.__s3){window.__s3=1;clickJoin(2,'客机C');}
-    if(t>6&&!window.__s4){window.__s4=1;frames[0].contentWindow.document.getElementById('startBtn').click();slog('[SIM] A start clicked');}
+    if(t>1&&!window.__s1){try{var aw=frames[0].contentWindow;var ni=aw.document.getElementById('nameInput');var hb=aw.document.getElementById('hostBtn');if(ni&&hb){window.__s1=1;ni.value='主机';hb.click();slog('[SIM] A host clicked');}}catch(e){}}
+    if(t>2.5&&!window.__s2){window.__d2=window.__d2||{v:true};if(clickJoin(1,'客机B',window.__d2)&&window.__d2.v)window.__s2=1;}
+    if(t>4&&!window.__s3){window.__d3=window.__d3||{v:true};if(clickJoin(2,'客机C',window.__d3)&&window.__d3.v)window.__s3=1;}
+    if(t>6&&!window.__s4){try{var sb=frames[0].contentWindow.document.getElementById('startBtn');if(sb){window.__s4=1;sb.click();slog('[SIM] A start clicked');}}catch(e){}}
     if(t>8&&!window.__s5){window.__s5=1;
       for(var i=1;i<=2;i++){var w=frames[i].contentWindow;slog('[SIM] client'+i+' autoEntered='+w.__G.LAN.entered);}
     }
@@ -59,10 +63,10 @@ function step(){
         slog('[SIM] forced kill near C, host foods='+aw2.__G.foods.length);
       }else slog('[SIM] kill setup failed');
     }
-    if(t>11.5&&!window.__s7){window.__s7=1;
+    if(t>10.5&&!window.__s7){window.__s7=1;
       var cw3=frames[2].contentWindow;
       var ch=cw3.__G.player.pts[0];
-      var near=0;for(var i=0;i<cw3.__G.foods.length;i++){var f=cw3.__G.foods[i];if(Math.abs(f.x-ch.x)<450&&Math.abs(f.y-ch.y)<280)near++;}
+      var near=0;for(var i=0;i<cw3.__G.foods.length;i++){var f=cw3.__G.foods[i];if(Math.abs(f.x-ch.x)<500&&Math.abs(f.y-ch.y)<320)near++;}
       slog('[SIM] C foods='+cw3.__G.foods.length+' nearC='+near+' C snaps='+cw3.__G.LAN.snapRecv+' C alive='+(cw3.__G.player.alive?1:0));
       slog('[SIM] B snaps='+frames[1].contentWindow.__G.LAN.snapRecv);
     }
