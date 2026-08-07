@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.0';
+var VERSION='3.1';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -127,8 +127,9 @@ function clearOf(x,y,d){for(var k=0;k<snakes.length;k++){var s=snakes[k];if(!s.a
 function rad(s){return 4.5+Math.min(9,s.score*0.045);}
 function zoomOf(s){var z=Math.max(0.65,1-Math.max(0,s.score-26)*0.0012);if((s.zmT||0)>tickN)z*=0.8;return z;}
 var NAMES=['蛇王','大胃王','闪电','卷卷','小皮','奶糖','墨墨','豆豆','阿紫'];
+var UID=1;
 function mkSnake(name,color,isPlayer){
-var s={name:name,color:color,isPlayer:!!isPlayer,pts:[],trail:[],aggro:rnd(0.2,0.6),vlen:26,angle:rnd(0,Math.PI*2),tAngle:0,score:26,kills:0,alive:true,boost:false,grace:150,aiT:0,aiA:rnd(0,Math.PI*2),respawn:0,deadT:0};
+var s={name:name,color:color,isPlayer:!!isPlayer,pts:[],trail:[],aggro:rnd(0.2,0.6),vlen:26,angle:rnd(0,Math.PI*2),tAngle:0,score:26,kills:0,alive:true,boost:false,grace:150,aiT:0,aiA:rnd(0,Math.PI*2),respawn:0,deadT:0,tseq:0,snapFull:true,uid:UID++};
 place(s);return s;
 }
 function farFromHumans(x,y,d){
@@ -179,7 +180,7 @@ function saveHS(a){HS_MEM=a;try{localStorage.setItem('snake_hs',JSON.stringify(a
 function recordScore(){var e={n:player.name,s:Math.floor(player.score),k:player.kills,t:Math.floor(aliveTicks/60),d:Date.now()+Math.random()};var a=loadHS();a.push(e);a.sort(function(x,y){return y.s-x.s;});a=a.slice(0,10);saveHS(a);return{a:a,id:e.d};}
 function esc(s){return String(s).replace(/[<>&"]/g,'');}
 function hsListHTML(a,curId){if(!a.length)return '';var h='<div class="hs"><div class="t">历史最高分 TOP '+a.length+'</div>';for(var i=0;i<a.length;i++){var e=a[i];h+='<div class="r'+(e.d===curId?' cur':'')+'"><span>'+(i+1)+'. '+esc(e.n)+'</span><span>'+e.s+'</span></div>';}return h+'</div>';}
-var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:false,pendingJoin:false};
+var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:false,pendingJoin:false,sentSeq:{}};
 var remotes={},startHTML='';
 function lanSend(o){var s=JSON.stringify(o);if(window.Android&&Android.lanSend){try{Android.lanSend(s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,msg:s},'*');}catch(e){}}}
 function lanSendTo(cid,o){cid=parseInt(cid,10);var s=JSON.stringify(o);if(window.Android&&Android.lanSendTo){try{Android.lanSendTo(cid,s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,to:cid,msg:s},'*');}catch(e){}}}
@@ -187,7 +188,7 @@ window.__lanOnMsg=function(id,s){var m;try{m=JSON.parse(s);}catch(e){return;}try
 window.addEventListener('message',function(e){if(e.data&&e.data.lan)window.__lanOnMsg(e.data.from||0,e.data.msg);});
 window.__lanPeer=function(id,joined){
 if(LAN.mode!==1)return;
-if(!joined){var rs=remotes[id];if(rs){var ix=snakes.indexOf(rs);if(ix>=0)snakes.splice(ix,1);delete remotes[id];}}
+if(!joined){var rs=remotes[id];if(rs){var ix=snakes.indexOf(rs);if(ix>=0)snakes.splice(ix,1);delete remotes[id];}delete LAN.sentSeq[id];}
 var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remotes).length+' 人，点「开始游戏」开局！';
 };
 window.__lanStatus=function(s){
@@ -225,6 +226,7 @@ if(m.t==='hello'&&LAN.mode===1){
 var rs=remotes[id];
 if(!rs){rs=mkSnake(m.n||'玩家'+(id+1),m.c||'#ff7b72',false);rs.remote=true;rs.isHuman=true;snakes.push(rs);remotes[id]=rs;}
 else{rs.name=m.n||rs.name;rs.color=m.c||rs.color;}
+LAN.sentSeq[id]={};
 fixColorConflicts();
 lanSendTo(id,{t:'you',i:snakes.indexOf(rs)});
 if(started)lanSendTo(id,{t:'start'});
@@ -233,7 +235,8 @@ var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remo
 else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;}
 else if(m.t==='in'&&LAN.mode===1&&remotes[id]){remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;}
 else if(m.t==='sk'&&LAN.mode===1&&remotes[id])activateSkill(remotes[id]);
-else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;place(rs2);}
+else if(m.t==='rs'&&LAN.mode===1){LAN.sentSeq[id]={};}
+else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
 else if(m.t==='snap'&&LAN.mode===2){applySnap(m);}
 else if(m.t==='start'&&LAN.mode===2){clientEnter();}
 else if(m.t==='pz'){
@@ -248,16 +251,23 @@ $('ovl').style.display='none';
 ac();musStart();sfxStart();
 lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
 }
-function buildSnap(rsnake){
+function buildSnap(cid,rsnake){
 var sn=[];
+var ss=LAN.sentSeq[cid]||(LAN.sentSeq[cid]={});
 var rp0=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
 for(var i=0;i<snakes.length;i++){var s=snakes[i];
-var near=rp0&&dist(s.pts[0].x,s.pts[0].y,rp0.x,rp0.y)<2400+s.pts.length*SP;
-var stp=near?(s.pts.length<=120?1:2):Math.max(2,Math.ceil(s.pts.length/160));
-var pts=[];for(var j=0;j<s.pts.length;j+=stp){pts.push(Math.round(s.pts[j].x));pts.push(Math.round(s.pts[j].y));}
-var tl=s.pts[s.pts.length-1];
-if(pts.length<2||pts[pts.length-2]!==Math.round(tl.x)||pts[pts.length-1]!==Math.round(tl.y)){pts.push(Math.round(tl.x));pts.push(Math.round(tl.y));}
-sn.push({i:i,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0],p:pts});
+// 头部轨迹增量同步: 默认只发上次快照后的新轨迹点; 首次/重生/断档时发全量(f=1)
+var lw=ss[s.uid],tr=[],full=0;
+if(s.snapFull||lw===undefined||lw>s.tseq||s.tseq-lw>s.trail.length){
+full=1;
+var need=Math.min(s.trail.length,Math.ceil(s.vlen*0.9)+30);
+for(var j=0;j<need;j+=2){tr.push(Math.round(s.trail[j].x));tr.push(Math.round(s.trail[j].y));}
+}else{
+var cnt=Math.min(s.tseq-lw,s.trail.length);
+for(var j2=0;j2<cnt;j2++){tr.push(Math.round(s.trail[j2].x));tr.push(Math.round(s.trail[j2].y));}
+}
+ss[s.uid]=s.tseq;
+sn.push({i:i,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(s.boost&&s.score>28)?1:0,f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0]});
 }
 var fd=[];
 var rp=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
@@ -276,21 +286,40 @@ LAN.snapRecv++;
 if(!LAN.entered)clientEnter();
 for(var i=0;i<m.sn.length;i++){var ms=m.sn[i];var ls=LAN.cSnakes[i];
 if(!ls){
-ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,tgt:null,tgtAngle:ms.g,bornT:tickN};
-for(var q=0;q+1<ms.p.length;q+=2)ls.pts.push({x:ms.p[q],y:ms.p[q+1]});
-ls.trail=ls.pts.map(function(z){return{x:z.x,y:z.y};});
+ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,predN:0,bornT:tickN};
 LAN.cSnakes[i]=ls;
 }
-ls.name=ms.n;ls.color=ms.c;ls.kills=ms.k;ls.score=ms.s;ls.isHuman=!!ms.h;
+var prevScore=ls.score;
+ls.name=ms.n;ls.color=ms.c;ls.kills=ms.k;ls.score=ms.s;ls.isHuman=!!ms.h;ls.boost=!!ms.b;
 if(ms.e){ls.magT=tickN+ms.e[0];ls.shdT=tickN+ms.e[1];ls.zmT=tickN+ms.e[2];ls.x5T=tickN+ms.e[3];ls.fzT=tickN+ms.e[4];ls.skillN=ms.e[5];}
 var wasAlive=ls.alive;
-ls.alive=!!ms.a;ls.tgtAngle=ms.g;ls.tgt=ms.p;
+ls.alive=!!ms.a;
+ls.authH=ms.hh;
+// 全量/重生/分数骤降(跨局残留) → 以权威轨迹整条重建
+if(ms.f||(!wasAlive&&ls.alive)||ms.s+80<prevScore){
+ls.trail.length=0;
+if(ms.tr)for(var q0=0;q0+1<ms.tr.length;q0+=2)ls.trail.push({x:ms.tr[q0],y:ms.tr[q0+1]});
+if(!ls.trail.length&&ms.hh)ls.trail.push({x:ms.hh[0],y:ms.hh[1]});
+ls.pts.length=0;
+if(ls.trail.length)ls.pts.push({x:ls.trail[0].x,y:ls.trail[0].y});
+ls.vlen=ms.s;ls.predN=0;ls.angle=ms.g;ls.tAngle=ms.g;
+rebuildBody(ls);
+}else if(i!==LAN.ownIdx){
+// 增量: 先撤掉本地预测点, 再拼上权威轨迹增量, 头部向权威位置收敛
+var pn=ls.predN||0;while(pn-->0&&ls.trail.length>1)ls.trail.shift();
+if(ms.tr)for(var q=ms.tr.length-2;q>=0;q-=2)ls.trail.unshift({x:ms.tr[q],y:ms.tr[q+1]});
+ls.predN=0;
+if(ms.hh&&ls.trail.length){var t0=ls.trail[0];t0.x+=(ms.hh[0]-t0.x)*0.5;t0.y+=(ms.hh[1]-t0.y)*0.5;
+if(ls.pts.length){var hp=ls.pts[0];hp.x+=(t0.x-hp.x)*0.5;hp.y+=(t0.y-hp.y)*0.5;}}
+ls.angle+=norm(ms.g-ls.angle)*0.5;ls.tAngle=ms.g;
+}
 if(i===LAN.ownIdx){
 ls.isPlayer=true;
 if(wasAlive&&!ls.alive){deaths++;sfxDie();showDeath();}
 if(!wasAlive&&ls.alive){var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveBtn'))ov.style.display='none';}
 }
 }
+LAN.cSnakes.length=m.sn.length;
 snakes=LAN.cSnakes;
 for(var j0=0;j0<foods.length;j0++)foods[j0].miss=(foods[j0].miss||0)+1;
 for(var j=0;j<m.fd.length;j++){
@@ -304,22 +333,30 @@ for(var j5=foods.length-1;j5>=0;j5--)if(foods[j5].miss>1)foods.splice(j5,1);
 if(m.pw){powers.length=0;for(var j2=0;j2<m.pw.length;j2++){var q2=m.pw[j2];powers.push({x:q2[0],y:q2[1],r:10,type:PWT[q2[2]>=0?q2[2]:0]});}}
 if(LAN.ownIdx>=0&&LAN.cSnakes[LAN.ownIdx])player=LAN.cSnakes[LAN.ownIdx];
 }
-function blendSnake(ls){
-var tp=ls.tgt;if(!tp)return;
-var n=tp.length>>1;
-while(ls.pts.length<n)ls.pts.push({x:tp[ls.pts.length*2],y:tp[ls.pts.length*2+1]});
-while(ls.pts.length>n)ls.pts.pop();
-for(var i=0;i<n;i++){var p=ls.pts[i];p.x+=(tp[i*2]-p.x)*0.3;p.y+=(tp[i*2+1]-p.y)*0.3;}
-ls.angle+=norm(ls.tgtAngle-ls.angle)*0.3;
-}
 function clientTick(){
 tickN++;
 player.boost=(Object.keys(boostIds).length>0)||mouseBoost;
 if(tickN-comboT>90)combo=0;
 if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;
 moveSnake(player);
-if(player.tgt&&player.tgt.length>=2){var hh=player.pts[0];hh.x+=(player.tgt[0]-hh.x)*0.15;hh.y+=(player.tgt[1]-hh.y)*0.15;}
-for(var k=0;k<snakes.length;k++){var s=snakes[k];if(s!==player&&s.alive)blendSnake(s);}
+if(player.authH){var hh=player.pts[0];hh.x+=(player.authH[0]-hh.x)*0.15;hh.y+=(player.authH[1]-hh.y)*0.15;}
+// 远端蛇: 与主机同参数本地预测前进, 轨迹入轨后按同一弧长算法重建完整蛇身(零采样精度损失)
+for(var k=0;k<snakes.length;k++){var s=snakes[k];if(s===player||!s.alive||!s.pts.length)continue;
+var turn=0.13;
+s.angle+=Math.max(-turn,Math.min(turn,norm(s.tAngle-s.angle)));
+var zm=zoomOf(s);
+var sp=(3.0/zm)*(1+(1-zm)*0.4)*((s.boost&&s.score>28)?1.8:1);
+if((s.fzT||0)>tickN)sp*=1.25;
+var h=s.pts[0];
+h.x+=Math.cos(s.angle)*sp;h.y+=Math.sin(s.angle)*sp;
+var dc=Math.hypot(h.x,h.y),lim=WORLD_R-rad(s);
+if(dc>lim){var ux=h.x/dc,uy=h.y/dc;var vx=Math.cos(s.angle),vy=Math.sin(s.angle);var dot=vx*ux+vy*uy;if(dot>0){vx-=ux*dot;vy-=uy*dot;s.angle=Math.atan2(vy,vx);}h.x=ux*lim;h.y=uy*lim;}
+s.trail.unshift({x:h.x,y:h.y});
+s.predN=(s.predN||0)+1;
+rebuildBody(s);
+// 本地轨迹弧长不足以覆盖身体(大分跳变) → 请求主机全量重同步
+if((s.__pile||0)>8&&tickN-(s.__rsT||-9999)>60){s.__rsT=tickN;lanSend({t:'rs'});}
+}
 for(var tf=0;tf<foods.length;tf++){var fo=foods[tf];if(fo.tx!==undefined){fo.x+=(fo.tx-fo.x)*0.35;fo.y+=(fo.ty-fo.y)*0.35;}}
 if(LAN.snapRecv===0&&tickN%90===0)lanSend({t:'hello',n:player.name,c:player.color});
 lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
@@ -406,12 +443,22 @@ if(dot>0){vx-=ux*dot;vy-=uy*dot;s.angle=Math.atan2(vy,vx);}
 h.x=ux*lim;h.y=uy*lim;
 }
 s.trail.unshift({x:h.x,y:h.y});
+s.tseq=(s.tseq||0)+1;
+rebuildBody(s);
+if(s.boost&&s.score>28&&LAN.mode!==2&&(s.fzT||0)<=tickN){
+s.score-=0.10;
+if(tickN%15===0){var t2=s.pts[s.pts.length-1];spawnFood(t2.x+rnd(-4,4),t2.y+rnd(-4,4),1);}
+}
+}
+// 由蛇头轨迹按恒定弧长重建蛇身(主机与客机共用同一算法, 保证渲染一致)
+function rebuildBody(s){
+if(!s.trail.length)return;
 if(s.vlen===undefined)s.vlen=s.score;
 if(s.score>s.vlen){var gr=Math.max(0.35,(s.score-s.vlen)*0.03);s.vlen=Math.min(s.score,s.vlen+gr);}
 else if(s.score<s.vlen)s.vlen=Math.max(s.score,s.vlen-0.6);
 var targetPx=Math.max(12,s.vlen)*SP;
 var pts=s.pts;
-pts[0]=h;
+if(!pts.length&&s.trail.length)pts.push({x:s.trail[0].x,y:s.trail[0].y});
 var dW=0,ti=0,pi=1;
 var ax=s.trail[0].x,ay=s.trail[0].y;
 while(pi*SP<=targetPx+0.001&&ti<s.trail.length-1){
@@ -441,13 +488,10 @@ pi++;break;
 }
 var lt=s.trail[s.trail.length-1];
 var minLen=Math.max(12,Math.floor(s.vlen));
+s.__pile=Math.max(0,minLen-pi);
 while(pi<minLen){if(pts[pi]){pts[pi].x=lt.x;pts[pi].y=lt.y;}else pts.push({x:lt.x,y:lt.y});pi++;}
 while(pts.length>pi)pts.pop();
 while(s.trail.length>s.vlen*2+70)s.trail.pop();
-if(s.boost&&s.score>28&&LAN.mode!==2&&(s.fzT||0)<=tickN){
-s.score-=0.10;
-if(tickN%15===0){var t2=pts[pts.length-1];spawnFood(t2.x+rnd(-4,4),t2.y+rnd(-4,4),1);}
-}
 }
 function eat(s){
 var h=s.pts[0],r=rad(s)+6;
@@ -538,7 +582,7 @@ if(player){if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;}
 for(var k=0;k<snakes.length;k++){
 var s=snakes[k];
 if(!s.alive){
-if(!s.isPlayer&&s.respawn&&tickN>=s.respawn){s.score=Math.random()<0.25?Math.floor(rnd(90,180)):26;s.alive=true;s.grace=120;s.angle=rnd(0,6.28);s.respawn=0;s.color=aiColorFree();place(s);}
+if(!s.isPlayer&&s.respawn&&tickN>=s.respawn){s.score=Math.random()<0.25?Math.floor(rnd(90,180)):26;s.alive=true;s.grace=120;s.angle=rnd(0,6.28);s.respawn=0;s.color=aiColorFree();place(s);s.snapFull=true;}
 continue;
 }
 if(s.isPlayer){if(AUTO)steerAI(s);}else if(s.remote){}else steerAI(s);
@@ -550,7 +594,7 @@ while(foods.length<FOOD_N)spawnFood();
 if(tickN%900===450&&powers.length<4)spawnPower();
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
-if(LAN.mode===1&&tickN%6===0){var anyR=false;for(var cid in remotes){lanSendTo(cid,buildSnap(remotes[cid]));anyR=true;}if(anyR)LAN.snapSent++;}
+if(LAN.mode===1&&tickN%6===0){var anyR=false;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid]));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){
@@ -582,7 +626,7 @@ player.skillN=2;activateSkill(player);
 if(tickN===240)slog('[TEST] skill fz='+((player.fzT||0)>tickN?1:0)+' skillN='+player.skillN);
 }
 if(AUTO){
-if(tickN===60){var z0t=zoomOf(player);var sct=W/VIEW_W;slog('[TEST] viewWH='+Math.round(VIEW_W/z0t)+'x'+Math.round(H/sct/z0t)+' win='+W+'x'+H);}
+if(tickN===60){var z0t=zoomOf({score:26,zmT:0});var sct=W/VIEW_W;slog('[TEST] viewWH='+Math.round(VIEW_W/z0t)+'x'+Math.round(H/sct/z0t)+' win='+W+'x'+H);}
 if(tickN%60===0){var amax=0,asum=0,acnt=0;for(var ak=0;ak<snakes.length;ak++){var as=snakes[ak];if(!as.isPlayer){asum+=as.score;acnt++;if(as.score>amax)amax=as.score;}}slog('[TEST] t='+(tickN/60|0)+'s alive='+(player.alive?1:0)+' score='+Math.floor(player.score)+' kills='+player.kills+' deaths='+deaths+' foods='+foods.length+' aiMax='+Math.floor(amax)+' aiAvg='+Math.floor(asum/Math.max(1,acnt)));}
 if(tickN===700){var mxErr=0;for(var qi=1;qi<player.pts.length;qi++){var qd=dist(player.pts[qi].x,player.pts[qi].y,player.pts[qi-1].x,player.pts[qi-1].y);if(Math.abs(qd-SP)>mxErr)mxErr=Math.abs(qd-SP);}slog('[TEST] spacing maxErr='+mxErr.toFixed(2)+' pts='+player.pts.length);}
 if(tickN===800)window.__lenLog={min:1e9,max:0,chg:0,prev:0};
@@ -753,7 +797,7 @@ $('reviveBtn').onclick=function(){revive();};
 }
 function revive(){
 if(LAN.mode===2){lanSend({t:'rv'});$('ovl').style.display='none';ac();musStart();return;}
-player.score=26;player.kills=0;aliveTicks=0;player.alive=true;player.grace=160;player.boost=false;boostIds={};mouseBoost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);
+player.score=26;player.kills=0;aliveTicks=0;player.alive=true;player.grace=160;player.boost=false;boostIds={};mouseBoost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);player.snapFull=true;
 $('ovl').style.display='none';
 $('boostBtn').className='';
 ac();musStart();sfxStart();

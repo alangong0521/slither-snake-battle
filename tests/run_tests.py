@@ -84,7 +84,8 @@ if(tickN===800&&window.__CHAINTEST__){var kl=snakes[4];kl.alive=true;kl.killChai
     fb = fb.replace("init();\n})();",
         "init();\nwindow.__G={get LAN(){return LAN},get player(){return player},get snakes(){return snakes},"
         "get foods(){return foods},get cv(){return cv},get remotes(){return remotes},get tickN(){return tickN},"
-        "get paused(){return paused},die:function(s,k){die(s,k);},mkSnake:mkSnake};\n})();")
+        "get paused(){return paused},die:function(s,k){die(s,k);},mkSnake:mkSnake,"
+        "lanSend:function(o){lanSend(o);}};\n})();")
     open(os.path.join(WORK, 'lan_fb.html'), 'w', encoding='utf-8').write(fb)
     # ---- 三人联机仿真 ----
     sim = open(os.path.join(ROOT, 'tests/lan_sim3_tpl.html'), encoding='utf-8').read()
@@ -168,6 +169,12 @@ def lan_tests():
     check('T29', '联机运行无JS异常', len(errs) == 0, ';'.join(errs[:3]))
     m = re.search(r'C ftween=(\d+)', joined)
     check('T32', '客机豆子平滑补间(带目标点)', m and int(m.group(1)) > 0, m.group(0) if m else '无日志')
+    m = re.search(r'B remoteSpacing maxErr=([\d.]+) pts=(\d+)', joined)
+    check('T33', '客机远端蛇身间距恒定(轨迹重建)', m and float(m.group(1)) <= 1.5 and int(m.group(2)) > 3,
+          m.group(0) if m else '无日志')
+    m = re.search(r'respawnReset BcPts=(\d+) CcPts=(\d+)', joined)
+    check('T34', '重生后蛇身重置为初始长度(跨局不残留)',
+          m and 5 < int(m.group(1)) < 80 and 5 < int(m.group(2)) < 80, m.group(0) if m else '无日志')
 
 def main():
     print('== 生成测试页(基于当前 index.html) ==')

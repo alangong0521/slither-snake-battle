@@ -72,29 +72,45 @@ function step(){
       slog('[SIM] C ftween='+tw);
       slog('[SIM] B snaps='+frames[1].contentWindow.__G.LAN.snapRecv);
     }
-    if(t>13&&!window.__s75){window.__s75=1;
+    if(t>11.2&&!window.__s79){window.__s79=1;
+      var bw4=frames[1].contentWindow;var rs0=bw4.__G.snakes[0];
+      var mx=0;if(rs0&&rs0.pts.length>6){for(var ri=4;ri<rs0.pts.length;ri++){var dd=Math.hypot(rs0.pts[ri].x-rs0.pts[ri-1].x,rs0.pts[ri].y-rs0.pts[ri-1].y);if(Math.abs(dd-5)>mx)mx=Math.abs(dd-5);}}
+      slog('[SIM] B remoteSpacing maxErr='+mx.toFixed(2)+' pts='+(rs0?rs0.pts.length:-1));
+    }
+    if(t>11.8&&!window.__s80){window.__s80=1;
+      var aw3=frames[0].contentWindow,cw4=frames[2].contentWindow;
+      var cs=aw3.__G.remotes[2];
+      if(cs&&cs.alive){aw3.__G.die(cs,aw3.__G.player);slog('[SIM] C killed by host, score was '+Math.round(cs.score));}
+      setTimeout(function(){try{cw4.__G.lanSend({t:'rv'});slog('[SIM] C sent revive');}catch(e){slog('[SIM] rv err '+e.message);}},300);
+    }
+    if(t>13.2&&!window.__s81){window.__s81=1;
+      var bw5=frames[1].contentWindow,cw5=frames[2].contentWindow;
+      var bC=bw5.__G.snakes[11],cC=cw5.__G.snakes[11];
+      slog('[SIM] respawnReset BcPts='+(bC?bC.pts.length:-1)+' CcPts='+(cC?cC.pts.length:-1)+' BcScore='+(bC?Math.round(bC.score):-1));
+    }
+    if(t>14.2&&!window.__s75){window.__s75=1;
       frames[1].contentWindow.document.getElementById('pauseBtn').click();
       window.__tk0=frames[0].contentWindow.__G.tickN;
       slog('[SIM] B clicked pause');
     }
-    if(t>14.5&&!window.__s76){window.__s76=1;
+    if(t>15.5&&!window.__s76){window.__s76=1;
       var pA=frames[0].contentWindow.__G.paused,pB=frames[1].contentWindow.__G.paused,pC=frames[2].contentWindow.__G.paused;
       var tkA=frames[0].contentWindow.__G.tickN,tkC=frames[2].contentWindow.__G.tickN;
       window.__tkC0=tkC;
       slog('[SIM] pauseSync paused A/B/C='+pA+'/'+pB+'/'+pC+' tickAfrozen='+(tkA-window.__tk0<=1));
     }
-    if(t>16&&!window.__s77){window.__s77=1;
+    if(t>16.8&&!window.__s77){window.__s77=1;
       frames[2].contentWindow.document.getElementById('pauseBtn').click();
       slog('[SIM] C clicked resume');
     }
-    if(t>17.5&&!window.__s78){window.__s78=1;
+    if(t>18.2&&!window.__s78){window.__s78=1;
       var pA2=frames[0].contentWindow.__G.paused,pB2=frames[1].contentWindow.__G.paused,pC2=frames[2].contentWindow.__G.paused;
       var tkC2=frames[2].contentWindow.__G.tickN;
       slog('[SIM] resumeSync paused A/B/C='+pA2+'/'+pB2+'/'+pC2+' tickCresumed='+(tkC2-window.__tkC0>10));
       slog('[SIM] done');
     }
   }catch(e){slog('[SIM] err '+e.message+' | '+(e.stack||'').split('\n')[1]);}
-  if(t<20)setTimeout(step,200);
+  if(t<21)setTimeout(step,200);
 }
 setTimeout(step,500);
 </script></body></html>
