@@ -88,6 +88,10 @@ function step(){
       var bC=bw5.__G.snakes[11],cC=cw5.__G.snakes[11];
       slog('[SIM] respawnReset BcPts='+(bC?bC.pts.length:-1)+' CcPts='+(cC?cC.pts.length:-1)+' BcScore='+(bC?Math.round(bC.score):-1));
     }
+    if(t>13.8&&!window.__s82){window.__s82=1;
+      var bw6=frames[1].contentWindow;
+      slog('[SIM] B noFReset='+(bw6.__G.LAN.noFReset||0)+' corrN='+(bw6.__G.LAN.corrN||0)+' corrSkip='+(bw6.__G.LAN.corrSkip||0));
+    }
     if(t>14.2&&!window.__s75){window.__s75=1;
       frames[1].contentWindow.document.getElementById('pauseBtn').click();
       window.__tk0=frames[0].contentWindow.__G.tickN;

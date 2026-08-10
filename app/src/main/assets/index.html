@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.2';
+var VERSION='3.3';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -297,8 +297,9 @@ if(ms.e){ls.magT=tickN+ms.e[0];ls.shdT=tickN+ms.e[1];ls.zmT=tickN+ms.e[2];ls.x5T
 var wasAlive=ls.alive;
 ls.alive=!!ms.a;
 ls.authH=ms.hh;
-// 全量/重生/分数骤降(跨局残留) → 以权威轨迹整条重建
-if(ms.f||(!wasAlive&&ls.alive)||ms.s+80<prevScore){
+// 全量/重生 → 以权威轨迹整条重建(分数下降不再触发: 蘑菇到期/加速消耗都是合法下降)
+if(ms.f||(!wasAlive&&ls.alive)){
+if(!ms.f)LAN.noFReset=(LAN.noFReset||0)+1;
 ls.trail.length=0;
 if(ms.tr)for(var q0=0;q0+1<ms.tr.length;q0+=2)ls.trail.push({x:ms.tr[q0],y:ms.tr[q0+1]});
 if(!ls.trail.length&&ms.hh)ls.trail.push({x:ms.hh[0],y:ms.hh[1]});
@@ -317,13 +318,15 @@ ls.angle+=norm(ms.g-ls.angle)*0.5;ls.tAngle=ms.g;
 }
 if(i===LAN.ownIdx){
 ls.isPlayer=true;
-// 与2帧前的本地历史位置比对得出真实误差(权威位置本身有输入延迟), 误差限幅后渐进修正
+// 与3帧前的本地历史位置比对得出真实误差; 小误差不纠正(死区, 消除持续拖拽感), 中误差渐进修正, 大误差才瞬移
 if(ms.hh&&ls.pts.length&&!ms.f){
-var ref=ownHist[(tickN-2+180)%90];
-var ox2=ms.hh[0]-(ref&&ref.t===tickN-2?ref.x:ls.pts[0].x),oy2=ms.hh[1]-(ref&&ref.t===tickN-2?ref.y:ls.pts[0].y);
+var ref=ownHist[((tickN-3)%90+90)%90];
+var bx2=(ref&&ref.t===tickN-3)?ref.x:ls.pts[0].x,by2=(ref&&ref.t===tickN-3)?ref.y:ls.pts[0].y;
+var ox2=ms.hh[0]-bx2,oy2=ms.hh[1]-by2;
 var om=Math.hypot(ox2,oy2);
-if(om>80){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;}
-else{ls.corrX=ox2;ls.corrY=oy2;}
+if(om>120){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;}
+else if(om>=20){ls.corrX=ox2;ls.corrY=oy2;LAN.corrN=(LAN.corrN||0)+1;}
+else LAN.corrSkip=(LAN.corrSkip||0)+1;
 }
 if(wasAlive&&!ls.alive){deaths++;sfxDie();showDeath();}
 if(!wasAlive&&ls.alive){var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveBtn'))ov.style.display='none';}
@@ -602,7 +605,8 @@ continue;
 }
 if(s.isPlayer){if(AUTO)steerAI(s);}else if(s.remote){}else steerAI(s);
 moveSnake(s);eat(s);
-if(s.mushs&&s.mushs.length&&s.mushs[0].t<=tickN){s.score=Math.max(26,s.score-s.mushs[0].v);s.mushs.shift();}
+if(s.mushs&&s.mushs.length&&s.mushs[0].t<=tickN){s.mushDrain=(s.mushDrain||0)+s.mushs[0].v;s.mushs.shift();}
+if(s.mushDrain>0){var mdd=Math.min(s.mushDrain,3);if(s.score-mdd<26)mdd=Math.max(0,s.score-26);s.score-=mdd;s.mushDrain-=mdd;}
 }
 collisions();
 if(player.alive)aliveTicks++;
@@ -610,11 +614,12 @@ while(foods.length<FOOD_N)spawnFood();
 if(tickN%900===450&&powers.length<4)spawnPower();
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
-if(LAN.mode===1&&tickN%2===0){var anyR=false;var withFd=tickN%6===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
+if(LAN.mode===1){var anyR=false;var withFd=tickN%6===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){
 powers.length=0;
+player.pts[0].x=-1200;player.pts[0].y=-1200; // 玩家移远, 防止误入对冲区干扰判定
 var A2=snakes[1],B2=snakes[2];
 A2.alive=B2.alive=true;A2.grace=B2.grace=0;A2.score=B2.score=40;A2.vlen=B2.vlen=40;
 A2.angle=0;A2.tAngle=0;A2.aiA=0;B2.angle=Math.PI;B2.tAngle=Math.PI;B2.aiA=Math.PI;A2.aiT=B2.aiT=99999;
@@ -663,7 +668,7 @@ if(tickN===420){
 var hp2=player.pts[0];
 slog('[TEST] edge after alive='+(player.alive?1:0)+' dc='+Math.round(Math.hypot(hp2.x,hp2.y))+' lim='+Math.round(WORLD_R-rad(player)));
 }
-if(tickN===900){player.grace=0;var h9=player.pts[0],o9=snakes[1];if(o9.alive&&o9.pts.length>14){h9.x=o9.pts[12].x;h9.y=o9.pts[12].y;}}
+if(tickN===900&&!window.__MUSHTEST__){player.grace=0;var h9=player.pts[0],o9=snakes[1];if(o9.alive&&o9.pts.length>14){h9.x=o9.pts[12].x;h9.y=o9.pts[12].y;}}
 if(tickN===150&&window.__AURATEST__){player.score=1100;slog('[TEST] aura gold on, score=1100');}
 if(tickN===360&&window.__AURATEST__){player.score=3100;for(var q=1;q<snakes.length;q++){if(snakes[q].alive){snakes[q].score=3200;window.__auraAI=q;break;}}slog('[TEST] rainbow blocked: player 3100 but rank2');}
 if(tickN===420&&window.__AURATEST__){if(window.__auraAI)snakes[window.__auraAI].score=100;slog('[TEST] rainbow on: player now rank1, score='+Math.floor(player.score));}
@@ -726,8 +731,8 @@ var bornA=1;if(s.bornT!==undefined&&tickN-s.bornT<40){bornA=0.1+0.9*(tickN-s.bor
 if(s.score>=3000&&s===topSnake){
 var hue0=(tickN*3)%360;
 ctx.lineWidth=r*1.7;
-for(var i2=s.pts.length-1;i2>=1;i2-=6){
-var j2=Math.max(0,i2-6);
+for(var i2=s.pts.length-1;i2>=1;i2-=24){
+var j2=Math.max(0,i2-24);
 ctx.strokeStyle='hsl('+((hue0+i2*4)%360)+',85%,60%)';
 ctx.beginPath();
 ctx.moveTo(s.pts[i2].x,s.pts[i2].y);
