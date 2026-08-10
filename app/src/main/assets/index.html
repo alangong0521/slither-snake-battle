@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.1';
+var VERSION='3.2';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -107,7 +107,7 @@ var PWC={mag:'#ffd700',shd:'#58a6ff',zm:'#d2a8ff',x5:'#3fb950',mush:'#ff9ecf'};
 var PWN={mag:'磁',shd:'盾',zm:'镜',x5:'×2',mush:'菇'};
 function spawnPower(){var p=randPos(200);powers.push({x:p.x,y:p.y,r:10,type:PWT[(Math.random()*PWT.length)|0]});}
 function applyPower(s,t){
-if(t==='mush')s.score+=500;
+if(t==='mush'){s.score+=500;(s.mushs=s.mushs||[]).push({t:tickN+900,v:500});}
 else if(t==='mag')s.magT=tickN+600;
 else if(t==='shd')s.shdT=tickN+480;
 else if(t==='zm')s.zmT=tickN+600;
@@ -181,6 +181,7 @@ function recordScore(){var e={n:player.name,s:Math.floor(player.score),k:player.
 function esc(s){return String(s).replace(/[<>&"]/g,'');}
 function hsListHTML(a,curId){if(!a.length)return '';var h='<div class="hs"><div class="t">历史最高分 TOP '+a.length+'</div>';for(var i=0;i<a.length;i++){var e=a[i];h+='<div class="r'+(e.d===curId?' cur':'')+'"><span>'+(i+1)+'. '+esc(e.n)+'</span><span>'+e.s+'</span></div>';}return h+'</div>';}
 var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:false,pendingJoin:false,sentSeq:{}};
+var ownHist=[];
 var remotes={},startHTML='';
 function lanSend(o){var s=JSON.stringify(o);if(window.Android&&Android.lanSend){try{Android.lanSend(s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,msg:s},'*');}catch(e){}}}
 function lanSendTo(cid,o){cid=parseInt(cid,10);var s=JSON.stringify(o);if(window.Android&&Android.lanSendTo){try{Android.lanSendTo(cid,s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,to:cid,msg:s},'*');}catch(e){}}}
@@ -251,7 +252,7 @@ $('ovl').style.display='none';
 ac();musStart();sfxStart();
 lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
 }
-function buildSnap(cid,rsnake){
+function buildSnap(cid,rsnake,withFd){
 var sn=[];
 var ss=LAN.sentSeq[cid]||(LAN.sentSeq[cid]={});
 var rp0=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
@@ -269,16 +270,17 @@ for(var j2=0;j2<cnt;j2++){tr.push(Math.round(s.trail[j2].x));tr.push(Math.round(
 ss[s.uid]=s.tseq;
 sn.push({i:i,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(s.boost&&s.score>28)?1:0,f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0]});
 }
-var fd=[];
+var fd=null;
 var rp=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
-if(rp){
+if(withFd&&rp){
+fd=[];
 var cand=[];
 for(var i2=0;i2<foods.length;i2++){var f=foods[i2];var dx=f.x-rp.x,dy=f.y-rp.y,dd=dx*dx+dy*dy;if(dd<1600*1600)cand.push([dd,f]);}
 cand.sort(function(a,b){return a[0]-b[0];});
 for(var i3=0;i3<cand.length&&fd.length<140;i3++){var f2=cand[i3][1];fd.push([Math.round(f2.x),Math.round(f2.y),+f2.r.toFixed(1),SERIES.indexOf(f2.c)]);}
 }
-var pw=[];
-for(var pi3=0;pi3<powers.length;pi3++){var p3=powers[pi3];pw.push([Math.round(p3.x),Math.round(p3.y),PWT.indexOf(p3.type)]);}
+var pw=null;
+if(withFd){pw=[];for(var pi3=0;pi3<powers.length;pi3++){var p3=powers[pi3];pw.push([Math.round(p3.x),Math.round(p3.y),PWT.indexOf(p3.type)]);}}
 return{t:'snap',tk:tickN,sn:sn,fd:fd,pw:pw};
 }
 function applySnap(m){
@@ -315,12 +317,21 @@ ls.angle+=norm(ms.g-ls.angle)*0.5;ls.tAngle=ms.g;
 }
 if(i===LAN.ownIdx){
 ls.isPlayer=true;
+// 与2帧前的本地历史位置比对得出真实误差(权威位置本身有输入延迟), 误差限幅后渐进修正
+if(ms.hh&&ls.pts.length&&!ms.f){
+var ref=ownHist[(tickN-2+180)%90];
+var ox2=ms.hh[0]-(ref&&ref.t===tickN-2?ref.x:ls.pts[0].x),oy2=ms.hh[1]-(ref&&ref.t===tickN-2?ref.y:ls.pts[0].y);
+var om=Math.hypot(ox2,oy2);
+if(om>80){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;}
+else{ls.corrX=ox2;ls.corrY=oy2;}
+}
 if(wasAlive&&!ls.alive){deaths++;sfxDie();showDeath();}
 if(!wasAlive&&ls.alive){var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveBtn'))ov.style.display='none';}
 }
 }
 LAN.cSnakes.length=m.sn.length;
 snakes=LAN.cSnakes;
+if(m.fd){
 for(var j0=0;j0<foods.length;j0++)foods[j0].miss=(foods[j0].miss||0)+1;
 for(var j=0;j<m.fd.length;j++){
 var f=m.fd[j],fx=f[0],fy=f[1];
@@ -331,6 +342,7 @@ else foods.push({x:fx,y:fy,tx:fx,ty:fy,r:f[2]||3,c:SERIES[f[3]>=0?f[3]:0],v:1,mi
 }
 for(var j5=foods.length-1;j5>=0;j5--)if(foods[j5].miss>1)foods.splice(j5,1);
 if(m.pw){powers.length=0;for(var j2=0;j2<m.pw.length;j2++){var q2=m.pw[j2];powers.push({x:q2[0],y:q2[1],r:10,type:PWT[q2[2]>=0?q2[2]:0]});}}
+}
 if(LAN.ownIdx>=0&&LAN.cSnakes[LAN.ownIdx])player=LAN.cSnakes[LAN.ownIdx];
 }
 function clientTick(){
@@ -339,7 +351,10 @@ player.boost=(Object.keys(boostIds).length>0)||mouseBoost;
 if(tickN-comboT>90)combo=0;
 if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;
 moveSnake(player);
-if(player.authH){var hh=player.pts[0];hh.x+=(player.authH[0]-hh.x)*0.15;hh.y+=(player.authH[1]-hh.y)*0.15;}
+// 自身蛇头平滑校正: 快照到达时算出的误差分摊到数帧渐进应用, 消除周期性回拽
+if(player.corrX||player.corrY){var hh=player.pts[0];hh.x+=player.corrX*0.25;hh.y+=player.corrY*0.25;player.corrX*=0.75;player.corrY*=0.75;if(Math.abs(player.corrX)<0.1&&Math.abs(player.corrY)<0.1)player.corrX=player.corrY=0;
+if(player.trail.length){player.trail[0].x=hh.x;player.trail[0].y=hh.y;}}
+ownHist[tickN%90]={t:tickN,x:player.pts[0].x,y:player.pts[0].y};
 // 远端蛇: 与主机同参数本地预测前进, 轨迹入轨后按同一弧长算法重建完整蛇身(零采样精度损失)
 for(var k=0;k<snakes.length;k++){var s=snakes[k];if(s===player||!s.alive||!s.pts.length)continue;
 var turn=0.13;
@@ -455,7 +470,7 @@ function rebuildBody(s){
 if(!s.trail.length)return;
 if(s.vlen===undefined)s.vlen=s.score;
 if(s.score>s.vlen){var gr=Math.max(0.35,(s.score-s.vlen)*0.03);s.vlen=Math.min(s.score,s.vlen+gr);}
-else if(s.score<s.vlen)s.vlen=Math.max(s.score,s.vlen-0.6);
+else if(s.score<s.vlen)s.vlen=Math.max(s.score,s.vlen-Math.max(0.6,(s.vlen-s.score)*0.05));
 var targetPx=Math.max(12,s.vlen)*SP;
 var pts=s.pts;
 if(!pts.length&&s.trail.length)pts.push({x:s.trail[0].x,y:s.trail[0].y});
@@ -587,6 +602,7 @@ continue;
 }
 if(s.isPlayer){if(AUTO)steerAI(s);}else if(s.remote){}else steerAI(s);
 moveSnake(s);eat(s);
+if(s.mushs&&s.mushs.length&&s.mushs[0].t<=tickN){s.score=Math.max(26,s.score-s.mushs[0].v);s.mushs.shift();}
 }
 collisions();
 if(player.alive)aliveTicks++;
@@ -594,7 +610,7 @@ while(foods.length<FOOD_N)spawnFood();
 if(tickN%900===450&&powers.length<4)spawnPower();
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
-if(LAN.mode===1&&tickN%6===0){var anyR=false;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid]));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
+if(LAN.mode===1&&tickN%2===0){var anyR=false;var withFd=tickN%6===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){
@@ -721,9 +737,12 @@ ctx.stroke();
 for(var g2=0;g2<3;g2++){ctx.strokeStyle='hsla('+((hue0+g2*60)%360)+',90%,65%,'+(0.35-g2*0.1)+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(h.x,h.y,r*2.2+g2*6+Math.sin(tickN*0.08+g2)*3,0,6.29);ctx.stroke();}
 }else{
 ctx.strokeStyle=s.color;ctx.lineWidth=r*1.7;
+// 大蛇渲染抽稀: 点间距仅5px, 隔点连线视觉无差别, 大幅降低多蛇后期的描边开销
+var rst=s.pts.length>900?3:(s.pts.length>300?2:1);
 ctx.beginPath();
 ctx.moveTo(s.pts[s.pts.length-1].x,s.pts[s.pts.length-1].y);
-for(var i3=s.pts.length-2;i3>=0;i3--)ctx.lineTo(s.pts[i3].x,s.pts[i3].y);
+for(var i3=s.pts.length-2;i3>=0;i3-=rst)ctx.lineTo(s.pts[i3].x,s.pts[i3].y);
+if((s.pts.length-2)%rst!==0&&s.pts.length>1)ctx.lineTo(s.pts[0].x,s.pts[0].y);
 ctx.stroke();
 if(s.score>=1000){
 for(var g3=0;g3<3;g3++){ctx.strokeStyle='rgba(255,215,0,'+(0.4-g3*0.12)+')';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(h.x,h.y,r*2.2+g3*6+Math.sin(tickN*0.08+g3)*3,0,6.29);ctx.stroke();}
