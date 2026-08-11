@@ -65,6 +65,8 @@ public class MainActivity extends Activity {
                 out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), false);
             }
 
+            int drops = 0;
+
             void startSender() {
                 Thread t = new Thread(() -> {
                     try {
@@ -74,9 +76,12 @@ public class MainActivity extends Activity {
                                 out.print(m);
                                 out.print('\n');
                                 out.flush();
+                                // PrintWriter 出错不抛异常, 必须主动检查, 否则半开连接永远"发送成功"
+                                if (out.checkError()) { netLog("write error, closing"); break; }
                             }
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) { netLog("sender err " + e.getMessage()); }
+                    close();
                 });
                 t.setDaemon(true);
                 t.start();
@@ -85,7 +90,10 @@ public class MainActivity extends Activity {
             void send(String msg) {
                 if (!alive) return;
                 // 队列满时丢弃最旧消息，保最新（快照类消息新覆盖旧，避免延迟堆积）
-                while (!sendQ.offer(msg)) { sendQ.poll(); }
+                while (!sendQ.offer(msg)) {
+                    sendQ.poll();
+                    if (++drops % 100 == 1) netLog("sendQ drops=" + drops);
+                }
             }
 
             void close() {
@@ -110,7 +118,10 @@ public class MainActivity extends Activity {
                     while (running) {
                         Socket s = ss.accept();
                         s.setTcpNoDelay(true);
+                        // 5秒读超时: 客机每帧都有上行消息, 超时即为半开死连接
+                        s.setSoTimeout(5000);
                         final int id = nextId++;
+                        netLog("accept id=" + id);
                         try {
                             final ClientConn c = new ClientConn(s);
                             clients.put(id, c);
@@ -149,6 +160,7 @@ public class MainActivity extends Activity {
         }
 
         private void readLoop(int id, ClientConn c) {
+            String why = "eof";
             try {
                 BufferedReader br = new BufferedReader(new InputStreamReader(c.sock.getInputStream(), "UTF-8"));
                 String line;
@@ -156,7 +168,8 @@ public class MainActivity extends Activity {
                     final String js = "window.__lanOnMsg(" + id + "," + JSONObject.quote(line) + ")";
                     ui.post(() -> wv.evaluateJavascript(js, null));
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) { why = String.valueOf(e.getMessage()); }
+            netLog("read end id=" + id + " why=" + why);
             if (id > 0) {
                 clients.remove(id);
                 peer(id, false);
@@ -164,6 +177,11 @@ public class MainActivity extends Activity {
                 status("closed");
             }
             c.close();
+        }
+
+        private void netLog(String s) {
+            final String js = "if(window.__lanLog)window.__lanLog(" + JSONObject.quote(s) + ")";
+            ui.post(() -> wv.evaluateJavascript(js, null));
         }
 
         @JavascriptInterface

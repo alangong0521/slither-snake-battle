@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.3';
+var VERSION='3.4';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -180,14 +180,37 @@ function saveHS(a){HS_MEM=a;try{localStorage.setItem('snake_hs',JSON.stringify(a
 function recordScore(){var e={n:player.name,s:Math.floor(player.score),k:player.kills,t:Math.floor(aliveTicks/60),d:Date.now()+Math.random()};var a=loadHS();a.push(e);a.sort(function(x,y){return y.s-x.s;});a=a.slice(0,10);saveHS(a);return{a:a,id:e.d};}
 function esc(s){return String(s).replace(/[<>&"]/g,'');}
 function hsListHTML(a,curId){if(!a.length)return '';var h='<div class="hs"><div class="t">历史最高分 TOP '+a.length+'</div>';for(var i=0;i<a.length;i++){var e=a[i];h+='<div class="r'+(e.d===curId?' cur':'')+'"><span>'+(i+1)+'. '+esc(e.n)+'</span><span>'+e.s+'</span></div>';}return h+'</div>';}
-var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:false,pendingJoin:false,sentSeq:{}};
+var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:false,pendingJoin:false,sentSeq:{},lastSnapTk:-1,lastSnapTick:0,rebases:0,gaps:0,teleports:0};
 var ownHist=[];
+// 机内调试日志: 环形缓冲 + 游戏内面板(快速点小地图5次开关)
+var DBG=[],dbgOn=false,mapTapTs=[];
+function dbg(s){DBG.push(tickN+': '+s);if(DBG.length>300)DBG.shift();if(dbgOn)renderDbg();}
+window.__lanLog=function(s){dbg('[net] '+s);};
+function renderDbg(){
+var p=$('dbgPanel');if(!p)return;
+var el=$('dbgPre');if(!el)return;
+el.textContent='snaps收='+LAN.snapRecv+' 发='+LAN.snapSent+' 缺口='+LAN.gaps+' 重建='+LAN.rebases+' 无标记重建='+(LAN.noFReset||0)+' 校正='+(LAN.corrN||0)+' 瞬移='+LAN.teleports+'\n'+DBG.slice(-40).join('\n');
+}
+function toggleDbg(){
+dbgOn=!dbgOn;
+var p=$('dbgPanel');
+if(dbgOn&&!p){p=document.createElement('div');p.id='dbgPanel';
+p.style.cssText='position:fixed;left:6px;top:6px;z-index:99;background:rgba(0,0,0,0.82);color:#8f8;font-size:9px;padding:6px;border-radius:6px;max-width:72%;pointer-events:auto';
+p.innerHTML='<pre id="dbgPre" style="margin:0;max-height:38vh;overflow:hidden;white-space:pre-wrap"></pre><button id="dbgCopy" style="margin-top:4px;font-size:11px">复制日志</button><button id="dbgClose" style="margin-left:6px;font-size:11px">关闭</button>';
+document.body.appendChild(p);
+$('dbgCopy').onclick=function(){var t=($('dbgPre')?$('dbgPre').textContent:'')+'\n---\n'+DBG.join('\n');try{navigator.clipboard.writeText(t);}catch(e){var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e2){}document.body.removeChild(ta);}$('dbgCopy').textContent='已复制';};
+$('dbgClose').onclick=function(){toggleDbg();};
+}
+if(!dbgOn&&p)p.remove();
+if(dbgOn)renderDbg();
+}
 var remotes={},startHTML='';
 function lanSend(o){var s=JSON.stringify(o);if(window.Android&&Android.lanSend){try{Android.lanSend(s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,msg:s},'*');}catch(e){}}}
 function lanSendTo(cid,o){cid=parseInt(cid,10);var s=JSON.stringify(o);if(window.Android&&Android.lanSendTo){try{Android.lanSendTo(cid,s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,to:cid,msg:s},'*');}catch(e){}}}
 window.__lanOnMsg=function(id,s){var m;try{m=JSON.parse(s);}catch(e){return;}try{lanOnMsg(id,m);}catch(e){slog('[ERR] lan '+(e&&e.message));}};
 window.addEventListener('message',function(e){if(e.data&&e.data.lan)window.__lanOnMsg(e.data.from||0,e.data.msg);});
 window.__lanPeer=function(id,joined){
+dbg('peer id='+id+' joined='+joined);
 if(LAN.mode!==1)return;
 if(!joined){var rs=remotes[id];if(rs){var ix=snakes.indexOf(rs);if(ix>=0)snakes.splice(ix,1);delete remotes[id];}delete LAN.sentSeq[id];}
 var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remotes).length+' 人，点「开始游戏」开局！';
@@ -200,7 +223,7 @@ if(LAN.mode===1){if(li)li.textContent='已加入 '+Object.keys(remotes).length+'
 else if(LAN.mode===2){if(li)li.textContent='已连接主机，等待开局…';lanSend({t:'hello',n:player.name,c:player.color});}
 }
 else if(s.indexOf('error')===0){if(li)li.textContent='连接失败：'+s;}
-else if(s==='closed'){if(li)li.textContent='连接已断开';}
+else if(s==='closed'){if(li)li.textContent='连接已断开';dbg('连接closed');if(LAN.entered)showLanDead();}
 };
 function lanHostRoom(){
 var nm=($('nameInput').value||'').trim();if(nm)player.name=nm;
@@ -234,7 +257,7 @@ if(started)lanSendTo(id,{t:'start'});
 var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remotes).length+' 人，点「开始游戏」开局！';
 }
 else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;}
-else if(m.t==='in'&&LAN.mode===1&&remotes[id]){remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;}
+else if(m.t==='in'&&LAN.mode===1&&remotes[id]){remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;remotes[id].lastInT=tickN;}
 else if(m.t==='sk'&&LAN.mode===1&&remotes[id])activateSkill(remotes[id]);
 else if(m.t==='rs'&&LAN.mode===1){LAN.sentSeq[id]={};}
 else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
@@ -244,6 +267,14 @@ else if(m.t==='pz'){
 if(LAN.mode===1){paused=!!m.on;$('pauseBtn').textContent=paused?'继续':'暂停';lanSend({t:'pz',on:m.on});}
 else if(LAN.mode===2){paused=!!m.on;$('pauseBtn').textContent=paused?'继续':'暂停';}
 }
+}
+function showLanDead(){
+if(LAN.mode!==2||!LAN.entered||LAN.dead)return;
+LAN.dead=true;dbg('掉线弹窗');
+var o=$('ovl');
+o.style.display='flex';
+o.innerHTML='<h3>与主机的连接已断开</h3><p>本局数据已失效，请重新加入房间</p><button class="btn" id="deadBtn">返回主页</button>';
+$('deadBtn').onclick=function(){try{if(window.Android&&Android.lanStop)Android.lanStop();}catch(e){}location.reload();};
 }
 function clientEnter(){
 if(LAN.mode!==2||LAN.entered)return;
@@ -284,7 +315,10 @@ if(withFd){pw=[];for(var pi3=0;pi3<powers.length;pi3++){var p3=powers[pi3];pw.pu
 return{t:'snap',tk:tickN,sn:sn,fd:fd,pw:pw};
 }
 function applySnap(m){
-LAN.snapRecv++;
+LAN.snapRecv++;LAN.lastSnapTick=tickN;
+// 快照序号断档(发送队列丢旧保新会丢包) → 增量轨迹出现空洞, 请求全量重同步
+if(LAN.lastSnapTk>=0&&m.tk-LAN.lastSnapTk>3){LAN.gaps++;dbg('快照断档 +'+(m.tk-LAN.lastSnapTk)+' 请求重同步');lanSend({t:'rs'});}
+LAN.lastSnapTk=m.tk;
 if(!LAN.entered)clientEnter();
 for(var i=0;i<m.sn.length;i++){var ms=m.sn[i];var ls=LAN.cSnakes[i];
 if(!ls){
@@ -300,6 +334,7 @@ ls.authH=ms.hh;
 // 全量/重生 → 以权威轨迹整条重建(分数下降不再触发: 蘑菇到期/加速消耗都是合法下降)
 if(ms.f||(!wasAlive&&ls.alive)){
 if(!ms.f)LAN.noFReset=(LAN.noFReset||0)+1;
+LAN.rebases++;if(LAN.rebases%20===1)dbg('整条重建 #'+LAN.rebases+' idx='+i+(ms.f?'':'(无标记!)'));
 ls.trail.length=0;
 if(ms.tr)for(var q0=0;q0+1<ms.tr.length;q0+=2)ls.trail.push({x:ms.tr[q0],y:ms.tr[q0+1]});
 if(!ls.trail.length&&ms.hh)ls.trail.push({x:ms.hh[0],y:ms.hh[1]});
@@ -312,9 +347,10 @@ rebuildBody(ls);
 var pn=ls.predN||0;while(pn-->0&&ls.trail.length>1)ls.trail.shift();
 if(ms.tr)for(var q=ms.tr.length-2;q>=0;q-=2)ls.trail.unshift({x:ms.tr[q],y:ms.tr[q+1]});
 ls.predN=0;
-if(ms.hh&&ls.trail.length){var t0=ls.trail[0];t0.x+=(ms.hh[0]-t0.x)*0.5;t0.y+=(ms.hh[1]-t0.y)*0.5;
-if(ls.pts.length){var hp=ls.pts[0];hp.x+=(t0.x-hp.x)*0.5;hp.y+=(t0.y-hp.y)*0.5;}}
-ls.angle+=norm(ms.g-ls.angle)*0.5;ls.tAngle=ms.g;
+if(ms.hh&&ls.trail.length){var t0=ls.trail[0];t0.x+=(ms.hh[0]-t0.x)*0.35;t0.y+=(ms.hh[1]-t0.y)*0.35;
+if(ls.pts.length){var hp=ls.pts[0];hp.x+=(t0.x-hp.x)*0.35;hp.y+=(t0.y-hp.y)*0.35;}}
+// 角度不平滑修正: 只更新目标角, 由每帧0.13的匀速转向自然逼近(消除锐角)
+ls.angle+=norm(ms.g-ls.angle)*0.15;ls.tAngle=ms.g;
 }
 if(i===LAN.ownIdx){
 ls.isPlayer=true;
@@ -324,7 +360,7 @@ var ref=ownHist[((tickN-3)%90+90)%90];
 var bx2=(ref&&ref.t===tickN-3)?ref.x:ls.pts[0].x,by2=(ref&&ref.t===tickN-3)?ref.y:ls.pts[0].y;
 var ox2=ms.hh[0]-bx2,oy2=ms.hh[1]-by2;
 var om=Math.hypot(ox2,oy2);
-if(om>120){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;}
+if(om>120){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;LAN.teleports++;dbg('自身蛇瞬移 om='+Math.round(om));}
 else if(om>=20){ls.corrX=ox2;ls.corrY=oy2;LAN.corrN=(LAN.corrN||0)+1;}
 else LAN.corrSkip=(LAN.corrSkip||0)+1;
 }
@@ -377,6 +413,8 @@ if((s.__pile||0)>8&&tickN-(s.__rsT||-9999)>60){s.__rsT=tickN;lanSend({t:'rs'});}
 }
 for(var tf=0;tf<foods.length;tf++){var fo=foods[tf];if(fo.tx!==undefined){fo.x+=(fo.tx-fo.x)*0.35;fo.y+=(fo.ty-fo.y)*0.35;}}
 if(LAN.snapRecv===0&&tickN%90===0)lanSend({t:'hello',n:player.name,c:player.color});
+// 断线看门狗: 收过快照后连续2.5秒无快照 → 判定掉线, 弹窗退出僵尸局
+if(LAN.snapRecv>0&&tickN-LAN.lastSnapTick>150){dbg('看门狗触发: 无快照');showLanDead();return;}
 lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
@@ -615,6 +653,8 @@ if(tickN%900===450&&powers.length<4)spawnPower();
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
 if(LAN.mode===1){var anyR=false;var withFd=tickN%6===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
+// 心跳超时兜底: 6秒无任何上行消息的客机按僵尸连接移除(Java层另有5秒读超时)
+if(LAN.mode===1&&tickN%60===0){for(var zc in remotes){var zs=remotes[zc];if(zs.lastInT!==undefined&&tickN-zs.lastInT>360){dbg('心跳超时移除 id='+zc);var zix=snakes.indexOf(zs);if(zix>=0)snakes.splice(zix,1);delete remotes[zc];delete LAN.sentSeq[zc];}}}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){
@@ -865,6 +905,8 @@ seen[s.color]=1;
 }
 }
 function bindStartUI(){
+// 快速点小地图5次: 开关调试日志面板
+var mc0=$('map');if(mc0)mc0.addEventListener('pointerdown',function(){var now=Date.now();mapTapTs.push(now);while(mapTapTs.length&&now-mapTapTs[0]>2000)mapTapTs.shift();if(mapTapTs.length>=5){mapTapTs.length=0;toggleDbg();}});
 var fam=$('famRow');fam.innerHTML='';
 COLFAMS.forEach(function(f,fi){
 var b=document.createElement('div');

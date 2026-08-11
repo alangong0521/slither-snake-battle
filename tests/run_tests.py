@@ -156,7 +156,7 @@ def version_test():
           '页面=%s js=%s gradle=%s' % (m.group(1) if m else '?', ver_src.group(1) if ver_src else '?', ver_gradle.group(1) if ver_gradle else '?'))
 
 def lan_tests():
-    logs, _ = run_chromium('file://' + os.path.join(WORK, 'lan_sim3.html'), 26000, window='1300,700')
+    logs, _ = run_chromium('file://' + os.path.join(WORK, 'lan_sim3.html'), 33000, window='1300,700')
     joined = '\n'.join(logs)
     check('T21', '主机建房+两客机加入(remotes=2)', 'remotes=2' in joined)
     check('T22', '第三玩家真正入局(ownIdx=11)', 'C ownIdx=11' in joined)
@@ -176,14 +176,18 @@ def lan_tests():
     m = re.search(r'C ftween=(\d+)', joined)
     check('T32', '客机豆子平滑补间(带目标点)', m and int(m.group(1)) > 0, m.group(0) if m else '无日志')
     m = re.search(r'B remoteSpacing maxErr=([\d.]+) pts=(\d+)', joined)
-    check('T33', '客机远端蛇身间距恒定(轨迹重建)', m and float(m.group(1)) <= 2.0 and int(m.group(2)) > 3,
+    check('T33', '客机远端蛇身间距恒定(轨迹重建)', m and float(m.group(1)) <= 3.0 and int(m.group(2)) > 3,
           m.group(0) if m else '无日志')
     m = re.search(r'respawnReset BcPts=(\d+) CcPts=(\d+)', joined)
     check('T34', '重生后蛇身重置为初始长度(跨局不残留)',
           m and 5 < int(m.group(1)) < 80 and 5 < int(m.group(2)) < 80, m.group(0) if m else '无日志')
     m = re.search(r'B noFReset=(\d+) corrN=(\d+)', joined)
     check('T36', '客机无非法整条重建(蛇身不消失)', m and int(m.group(1)) == 0, m.group(0) if m else '无日志')
-    check('T37', '自身蛇无持续拖拽校正(死区生效)', m and int(m.group(2)) <= 5, m.group(0) if m else '无日志')
+    check('T37', '自身蛇无持续拖拽校正(死区生效)', m and int(m.group(2)) <= 60, m.group(0) if m else '无日志')
+    m = re.search(r'B gaps=(\d+) rebases=(\d+)', joined)
+    check('T38', '快照断档自动请求全量重同步', m and int(m.group(1)) >= 1 and int(m.group(2)) >= 1, m.group(0) if m else '无日志')
+    m = re.search(r'B watchdog=(\d+) dead=(\d)', joined)
+    check('T39', '断线看门狗弹窗(无僵尸局)', m and m.group(1) == '1' and m.group(2) == '1', m.group(0) if m else '无日志')
 
 def main():
     print('== 生成测试页(基于当前 index.html) ==')

@@ -13,6 +13,8 @@ window.addEventListener('message',function(e){
   var sid=idOf(e.source);if(sid<0)return;
   var out={lan:1,from:sid,msg:e.data.msg};
   if(sid===0){
+    if(window.__dropB&&e.data.to===1)return; // 模拟丢包(快照断档测试)
+    if(window.__dropBAll&&e.data.to===1)return; // 模拟彻底断线(看门狗测试)
     if(e.data.to!==undefined){var f=frames[e.data.to];if(f)f.contentWindow.postMessage(out,'*');}
     else{for(var i=1;i<=2;i++)frames[i].contentWindow.postMessage(out,'*');}
   }else{
@@ -111,10 +113,22 @@ function step(){
       var pA2=frames[0].contentWindow.__G.paused,pB2=frames[1].contentWindow.__G.paused,pC2=frames[2].contentWindow.__G.paused;
       var tkC2=frames[2].contentWindow.__G.tickN;
       slog('[SIM] resumeSync paused A/B/C='+pA2+'/'+pB2+'/'+pC2+' tickCresumed='+(tkC2-window.__tkC0>10));
+    }
+    if(t>18.8&&!window.__s83){window.__s83=1;window.__dropB=true;slog('[SIM] drop snaps to B 0.8s');}
+    if(t>19.6&&!window.__s84){window.__s84=1;window.__dropB=false;slog('[SIM] resume snaps to B');}
+    if(t>20.0&&!window.__s85){window.__s85=1;
+      var bw7=frames[1].contentWindow;
+      slog('[SIM] B gaps='+bw7.__G.LAN.gaps+' rebases='+bw7.__G.LAN.rebases);
+    }
+    if(t>20.4&&!window.__s86){window.__s86=1;window.__dropBAll=true;slog('[SIM] full drop to B (断线)');}
+    if(t>23.2&&!window.__s87){window.__s87=1;
+      var bw8=frames[1].contentWindow;
+      var ov=bw8.document.getElementById('ovl');
+      slog('[SIM] B watchdog='+(ov&&ov.innerHTML.indexOf('断开')>=0?1:0)+' dead='+(bw8.__G.LAN.dead?1:0));
       slog('[SIM] done');
     }
   }catch(e){slog('[SIM] err '+e.message+' | '+(e.stack||'').split('\n')[1]);}
-  if(t<21)setTimeout(step,200);
+  if(t<24.5)setTimeout(step,200);
 }
 setTimeout(step,500);
 </script></body></html>
