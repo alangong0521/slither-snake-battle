@@ -87,7 +87,7 @@ if(tickN===1500&&window.__MUSHTEST__){slog('[TEST] mush end drain='+(player.mush
     fb = fb.replace("init();\n})();",
         "init();\nwindow.__G={get LAN(){return LAN},get player(){return player},get snakes(){return snakes},"
         "get foods(){return foods},get cv(){return cv},get remotes(){return remotes},get tickN(){return tickN},"
-        "get paused(){return paused},die:function(s,k){die(s,k);},mkSnake:mkSnake,"
+        "get paused(){return paused},get DBG(){return DBG},die:function(s,k){die(s,k);},mkSnake:mkSnake,"
         "lanSend:function(o){lanSend(o);}};\n})();")
     open(os.path.join(WORK, 'lan_fb.html'), 'w', encoding='utf-8').write(fb)
     # ---- 三人联机仿真 ----
@@ -156,7 +156,7 @@ def version_test():
           '页面=%s js=%s gradle=%s' % (m.group(1) if m else '?', ver_src.group(1) if ver_src else '?', ver_gradle.group(1) if ver_gradle else '?'))
 
 def lan_tests():
-    logs, _ = run_chromium('file://' + os.path.join(WORK, 'lan_sim3.html'), 33000, window='1300,700')
+    logs, _ = run_chromium('file://' + os.path.join(WORK, 'lan_sim3.html'), 37000, window='1300,700')
     joined = '\n'.join(logs)
     check('T21', '主机建房+两客机加入(remotes=2)', 'remotes=2' in joined)
     check('T22', '第三玩家真正入局(ownIdx=11)', 'C ownIdx=11' in joined)
@@ -188,6 +188,22 @@ def lan_tests():
     check('T38', '快照断档自动请求全量重同步', m and int(m.group(1)) >= 1 and int(m.group(2)) >= 1, m.group(0) if m else '无日志')
     m = re.search(r'B watchdog=(\d+) dead=(\d)', joined)
     check('T39', '断线看门狗弹窗(无僵尸局)', m and m.group(1) == '1' and m.group(2) == '1', m.group(0) if m else '无日志')
+    # ---- v3.5 回归 ----
+    mb = re.search(r'B pause2OK snapLive=(\d) paused=(\d)', joined)
+    mc = re.search(r'C pause2OK snapLive=(\d) paused=(\d)', joined)
+    mh = re.search(r'host remoteN=(\d+)', joined)
+    check('T40', '5秒长暂停后恢复: 从机不掉线不卡死(心跳+pz自愈)',
+          mb and mb.group(1) == '1' and mb.group(2) == '0' and mc and mc.group(1) == '1'
+          and mc.group(2) == '0' and mh and mh.group(1) == '2',
+          '; '.join(x.group(0) for x in [mb, mc, mh] if x) or '无日志')
+    m = re.search(r'B deadFrozen alive=(\d) frozen=(\d) ovl=(\d)', joined)
+    check('T41', '从机被杀后本地蛇定格(不再可操控移动)', m and m.group(1) == '0' and m.group(2) == '1',
+          m.group(0) if m else '无日志')
+    m = re.search(r'C ownIdx2=(\d+) ownOk=(\d)', joined)
+    check('T42', '蛇数组增删后自身绑定不漂移(uid绑定)', m and m.group(2) == '1',
+          m.group(0) if m else '无日志')
+    m = re.search(r'C colorSame=(\d) color=(\S+)', joined)
+    check('T43', '重生后颜色与自选颜色一致', m and m.group(1) == '1', m.group(0) if m else '无日志')
 
 def main():
     print('== 生成测试页(基于当前 index.html) ==')

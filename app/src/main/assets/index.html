@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.4';
+var VERSION='3.5';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -252,14 +252,15 @@ if(!rs){rs=mkSnake(m.n||'玩家'+(id+1),m.c||'#ff7b72',false);rs.remote=true;rs.
 else{rs.name=m.n||rs.name;rs.color=m.c||rs.color;}
 LAN.sentSeq[id]={};
 fixColorConflicts();
-lanSendTo(id,{t:'you',i:snakes.indexOf(rs)});
+lanSendTo(id,{t:'you',i:snakes.indexOf(rs),u:rs.uid});
 if(started)lanSendTo(id,{t:'start'});
 var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remotes).length+' 人，点「开始游戏」开局！';
 }
-else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;}
-else if(m.t==='in'&&LAN.mode===1&&remotes[id]){remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;remotes[id].lastInT=tickN;}
+else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;LAN.ownUid=m.u;}
+else if(m.t==='in'&&LAN.mode===1&&remotes[id]){if(remotes[id].lastInT===undefined)dbg('首个上行 id='+id+' tickN='+tickN);remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;remotes[id].lastInT=tickN;}
 else if(m.t==='sk'&&LAN.mode===1&&remotes[id])activateSkill(remotes[id]);
 else if(m.t==='rs'&&LAN.mode===1){LAN.sentSeq[id]={};}
+else if(m.t==='hb'&&LAN.mode===1&&remotes[id]){remotes[id].lastInT=tickN;}
 else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
 else if(m.t==='snap'&&LAN.mode===2){applySnap(m);}
 else if(m.t==='start'&&LAN.mode===2){clientEnter();}
@@ -299,7 +300,7 @@ var cnt=Math.min(s.tseq-lw,s.trail.length);
 for(var j2=0;j2<cnt;j2++){tr.push(Math.round(s.trail[j2].x));tr.push(Math.round(s.trail[j2].y));}
 }
 ss[s.uid]=s.tseq;
-sn.push({i:i,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(s.boost&&s.score>28)?1:0,f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0]});
+sn.push({i:i,u:s.uid,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(s.boost&&s.score>28)?1:0,f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0]});
 }
 var fd=null;
 var rp=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
@@ -312,7 +313,7 @@ for(var i3=0;i3<cand.length&&fd.length<140;i3++){var f2=cand[i3][1];fd.push([Mat
 }
 var pw=null;
 if(withFd){pw=[];for(var pi3=0;pi3<powers.length;pi3++){var p3=powers[pi3];pw.push([Math.round(p3.x),Math.round(p3.y),PWT.indexOf(p3.type)]);}}
-return{t:'snap',tk:tickN,sn:sn,fd:fd,pw:pw};
+return{t:'snap',tk:tickN,pz:paused?1:0,sn:sn,fd:fd,pw:pw};
 }
 function applySnap(m){
 LAN.snapRecv++;LAN.lastSnapTick=tickN;
@@ -320,11 +321,22 @@ LAN.snapRecv++;LAN.lastSnapTick=tickN;
 if(LAN.lastSnapTk>=0&&m.tk-LAN.lastSnapTk>3){LAN.gaps++;dbg('快照断档 +'+(m.tk-LAN.lastSnapTk)+' 请求重同步');lanSend({t:'rs'});}
 LAN.lastSnapTk=m.tk;
 if(!LAN.entered)clientEnter();
-for(var i=0;i<m.sn.length;i++){var ms=m.sn[i];var ls=LAN.cSnakes[i];
+// 暂停状态随快照广播(自愈, 防 pz 消息丢失导致从机永远卡在暂停)
+if(m.pz!==undefined){var pz2=!!m.pz;if(pz2!==paused){paused=pz2;$('pauseBtn').textContent=paused?'继续':'暂停';}}
+var ownS=null;
+// 按 uid 匹配本地蛇(数组下标会随主机侧增删漂移, 按下标认蛇曾导致: 认错蛇/无标记整条重建/蛇身错位)
+var byUid={};
+for(var ci=0;ci<LAN.cSnakes.length;ci++){var cs0=LAN.cSnakes[ci];if(cs0&&cs0.uid!==undefined&&byUid[cs0.uid]===undefined)byUid[cs0.uid]=cs0;}
+var newArr=[];
+for(var i=0;i<m.sn.length;i++){var ms=m.sn[i];var ls=(ms.u!==undefined)?byUid[ms.u]:LAN.cSnakes[i];
 if(!ls){
 ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,predN:0,bornT:tickN};
-LAN.cSnakes[i]=ls;
 }
+ls.uid=ms.u;
+newArr.push(ls);
+// 以 uid 认自己的蛇(数组下标会随断线清理漂移, 曾导致从机认错蛇: 变色/卡26)
+var isOwn=(LAN.ownUid!==undefined&&ms.u===LAN.ownUid)||(LAN.ownUid===undefined&&i===LAN.ownIdx);
+if(isOwn)LAN.ownIdx=i;
 var prevScore=ls.score;
 ls.name=ms.n;ls.color=ms.c;ls.kills=ms.k;ls.score=ms.s;ls.isHuman=!!ms.h;ls.boost=!!ms.b;
 if(ms.e){ls.magT=tickN+ms.e[0];ls.shdT=tickN+ms.e[1];ls.zmT=tickN+ms.e[2];ls.x5T=tickN+ms.e[3];ls.fzT=tickN+ms.e[4];ls.skillN=ms.e[5];}
@@ -334,7 +346,7 @@ ls.authH=ms.hh;
 // 全量/重生 → 以权威轨迹整条重建(分数下降不再触发: 蘑菇到期/加速消耗都是合法下降)
 if(ms.f||(!wasAlive&&ls.alive)){
 if(!ms.f)LAN.noFReset=(LAN.noFReset||0)+1;
-LAN.rebases++;if(LAN.rebases%20===1)dbg('整条重建 #'+LAN.rebases+' idx='+i+(ms.f?'':'(无标记!)'));
+LAN.rebases++;if(LAN.rebases%20===1||!ms.f)dbg('整条重建 #'+LAN.rebases+' idx='+i+' name='+ms.n+(ms.f?'':'(无标记!)'));
 ls.trail.length=0;
 if(ms.tr)for(var q0=0;q0+1<ms.tr.length;q0+=2)ls.trail.push({x:ms.tr[q0],y:ms.tr[q0+1]});
 if(!ls.trail.length&&ms.hh)ls.trail.push({x:ms.hh[0],y:ms.hh[1]});
@@ -342,7 +354,7 @@ ls.pts.length=0;
 if(ls.trail.length)ls.pts.push({x:ls.trail[0].x,y:ls.trail[0].y});
 ls.vlen=ms.s;ls.predN=0;ls.angle=ms.g;ls.tAngle=ms.g;
 rebuildBody(ls);
-}else if(i!==LAN.ownIdx){
+}else if(!isOwn){
 // 增量: 先撤掉本地预测点, 再拼上权威轨迹增量, 头部向权威位置收敛
 var pn=ls.predN||0;while(pn-->0&&ls.trail.length>1)ls.trail.shift();
 if(ms.tr)for(var q=ms.tr.length-2;q>=0;q-=2)ls.trail.unshift({x:ms.tr[q],y:ms.tr[q+1]});
@@ -352,8 +364,8 @@ if(ls.pts.length){var hp=ls.pts[0];hp.x+=(t0.x-hp.x)*0.35;hp.y+=(t0.y-hp.y)*0.35
 // 角度不平滑修正: 只更新目标角, 由每帧0.13的匀速转向自然逼近(消除锐角)
 ls.angle+=norm(ms.g-ls.angle)*0.15;ls.tAngle=ms.g;
 }
-if(i===LAN.ownIdx){
-ls.isPlayer=true;
+if(isOwn){
+ls.isPlayer=true;ownS=ls;
 // 与3帧前的本地历史位置比对得出真实误差; 小误差不纠正(死区, 消除持续拖拽感), 中误差渐进修正, 大误差才瞬移
 if(ms.hh&&ls.pts.length&&!ms.f){
 var ref=ownHist[((tickN-3)%90+90)%90];
@@ -368,7 +380,7 @@ if(wasAlive&&!ls.alive){deaths++;sfxDie();showDeath();}
 if(!wasAlive&&ls.alive){var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveBtn'))ov.style.display='none';}
 }
 }
-LAN.cSnakes.length=m.sn.length;
+LAN.cSnakes=newArr;
 snakes=LAN.cSnakes;
 if(m.fd){
 for(var j0=0;j0<foods.length;j0++)foods[j0].miss=(foods[j0].miss||0)+1;
@@ -382,16 +394,19 @@ else foods.push({x:fx,y:fy,tx:fx,ty:fy,r:f[2]||3,c:SERIES[f[3]>=0?f[3]:0],v:1,mi
 for(var j5=foods.length-1;j5>=0;j5--)if(foods[j5].miss>1)foods.splice(j5,1);
 if(m.pw){powers.length=0;for(var j2=0;j2<m.pw.length;j2++){var q2=m.pw[j2];powers.push({x:q2[0],y:q2[1],r:10,type:PWT[q2[2]>=0?q2[2]:0]});}}
 }
-if(LAN.ownIdx>=0&&LAN.cSnakes[LAN.ownIdx])player=LAN.cSnakes[LAN.ownIdx];
+if(ownS)player=ownS;
 }
+// 注意: tickN 由 tick() 统一递增, 此处不得再 ++(曾有双重递增导致 tickN 恒奇/恒偶, %2/%60 门控整体失效, 从机被误踢)
 function clientTick(){
-tickN++;
+// 常驻心跳1Hz: 死亡观战/长暂停期间也保持上行, 防主机僵尸清理误踢(Java层另有5秒读超时)
+if(tickN%60===0){lanSend({t:'hb'});if(!LAN.__hbLogged){LAN.__hbLogged=1;dbg('客户端心跳启动 tickN='+tickN);}}
 player.boost=(Object.keys(boostIds).length>0)||mouseBoost;
 if(tickN-comboT>90)combo=0;
 if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;
-moveSnake(player);
+// 死亡后本地不再模拟移动(定格), 等主机快照/重生
+if(player.alive){player.__noRebuild=(player.vlen>500&&(tickN&1))?1:0;moveSnake(player);}
 // 自身蛇头平滑校正: 快照到达时算出的误差分摊到数帧渐进应用, 消除周期性回拽
-if(player.corrX||player.corrY){var hh=player.pts[0];hh.x+=player.corrX*0.25;hh.y+=player.corrY*0.25;player.corrX*=0.75;player.corrY*=0.75;if(Math.abs(player.corrX)<0.1&&Math.abs(player.corrY)<0.1)player.corrX=player.corrY=0;
+if(player.alive&&(player.corrX||player.corrY)){var hh=player.pts[0];hh.x+=player.corrX*0.25;hh.y+=player.corrY*0.25;player.corrX*=0.75;player.corrY*=0.75;if(Math.abs(player.corrX)<0.1&&Math.abs(player.corrY)<0.1)player.corrX=player.corrY=0;
 if(player.trail.length){player.trail[0].x=hh.x;player.trail[0].y=hh.y;}}
 ownHist[tickN%90]={t:tickN,x:player.pts[0].x,y:player.pts[0].y};
 // 远端蛇: 与主机同参数本地预测前进, 轨迹入轨后按同一弧长算法重建完整蛇身(零采样精度损失)
@@ -407,15 +422,17 @@ var dc=Math.hypot(h.x,h.y),lim=WORLD_R-rad(s);
 if(dc>lim){var ux=h.x/dc,uy=h.y/dc;var vx=Math.cos(s.angle),vy=Math.sin(s.angle);var dot=vx*ux+vy*uy;if(dot>0){vx-=ux*dot;vy-=uy*dot;s.angle=Math.atan2(vy,vx);}h.x=ux*lim;h.y=uy*lim;}
 s.trail.unshift({x:h.x,y:h.y});
 s.predN=(s.predN||0)+1;
+s.__noRebuild=(s.vlen>500&&(tickN&1))?1:0;
 rebuildBody(s);
 // 本地轨迹弧长不足以覆盖身体(大分跳变) → 请求主机全量重同步
 if((s.__pile||0)>8&&tickN-(s.__rsT||-9999)>60){s.__rsT=tickN;lanSend({t:'rs'});}
 }
 for(var tf=0;tf<foods.length;tf++){var fo=foods[tf];if(fo.tx!==undefined){fo.x+=(fo.tx-fo.x)*0.35;fo.y+=(fo.ty-fo.y)*0.35;}}
 if(LAN.snapRecv===0&&tickN%90===0)lanSend({t:'hello',n:player.name,c:player.color});
-// 断线看门狗: 收过快照后连续2.5秒无快照 → 判定掉线, 弹窗退出僵尸局
-if(LAN.snapRecv>0&&tickN-LAN.lastSnapTick>150){dbg('看门狗触发: 无快照');showLanDead();return;}
-lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
+// 断线看门狗: 收过快照后连续2.5秒无快照 → 判定掉线, 弹窗退出僵尸局(暂停期间不触发)
+if(LAN.snapRecv>0&&!paused&&tickN-LAN.lastSnapTick>150){dbg('看门狗触发: 无快照');showLanDead();return;}
+// 输入上报30Hz(主机每帧都要在主线程处理, 降频减负; 转向是连续量, 33ms 足够)
+if(tickN%2===0)lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
 if(player.alive)aliveTicks++;
@@ -509,6 +526,8 @@ if(tickN%15===0){var t2=s.pts[s.pts.length-1];spawnFood(t2.x+rnd(-4,4),t2.y+rnd(
 // 由蛇头轨迹按恒定弧长重建蛇身(主机与客机共用同一算法, 保证渲染一致)
 function rebuildBody(s){
 if(!s.trail.length)return;
+// 大蛇(>500)在客机上隔帧重建身体: 弧长遍历开销减半, 视觉无差别(头部照常每帧动)
+if(s.__noRebuild){s.__noRebuild=false;return;}
 if(s.vlen===undefined)s.vlen=s.score;
 if(s.score>s.vlen){var gr=Math.max(0.35,(s.score-s.vlen)*0.03);s.vlen=Math.min(s.score,s.vlen+gr);}
 else if(s.score<s.vlen)s.vlen=Math.max(s.score,s.vlen-Math.max(0.6,(s.vlen-s.score)*0.05));
@@ -629,7 +648,13 @@ if(!s.alive)break;
 }
 }
 function tick(){
-if(paused||!started)return;
+if(paused||!started){
+// 暂停时从机持续发心跳(tickN已冻结, 用墙钟), 防主机读超时误踢长暂停的从机
+if(paused&&started&&LAN.mode===2){var nwn=Date.now();if(nwn-(LAN.lastHb||0)>1000){LAN.lastHb=nwn;lanSend({t:'hb'});}}
+// 主机暂停时仍按10Hz发快照(带pz=1): 从机即使丢了pz消息也能自愈同步暂停态, 不会误判断线
+if(paused&&started&&LAN.mode===1){var pn2=Date.now();if(pn2-(LAN.lastPSnap||0)>100){LAN.lastPSnap=pn2;for(var pc2 in remotes)lanSendTo(pc2,buildSnap(pc2,remotes[pc2],false));}}
+return;
+}
 tickN++;
 if(LAN.mode===2){clientTick();return;}
 if(player&&!AUTO)player.boost=(Object.keys(boostIds).length>0)||mouseBoost;
@@ -638,7 +663,7 @@ if(player){if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;}
 for(var k=0;k<snakes.length;k++){
 var s=snakes[k];
 if(!s.alive){
-if(!s.isPlayer&&s.respawn&&tickN>=s.respawn){s.score=Math.random()<0.25?Math.floor(rnd(90,180)):26;s.alive=true;s.grace=120;s.angle=rnd(0,6.28);s.respawn=0;s.color=aiColorFree();place(s);s.snapFull=true;}
+if(!s.isPlayer&&!s.remote&&s.respawn&&tickN>=s.respawn){s.score=Math.random()<0.25?Math.floor(rnd(90,180)):26;s.alive=true;s.grace=120;s.angle=rnd(0,6.28);s.respawn=0;s.color=aiColorFree();place(s);s.snapFull=true;}
 continue;
 }
 if(s.isPlayer){if(AUTO)steerAI(s);}else if(s.remote){}else steerAI(s);
@@ -654,7 +679,7 @@ if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
 if(LAN.mode===1){var anyR=false;var withFd=tickN%6===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
 // 心跳超时兜底: 6秒无任何上行消息的客机按僵尸连接移除(Java层另有5秒读超时)
-if(LAN.mode===1&&tickN%60===0){for(var zc in remotes){var zs=remotes[zc];if(zs.lastInT!==undefined&&tickN-zs.lastInT>360){dbg('心跳超时移除 id='+zc);var zix=snakes.indexOf(zs);if(zix>=0)snakes.splice(zix,1);delete remotes[zc];delete LAN.sentSeq[zc];}}}
+if(LAN.mode===1&&tickN%60===0){for(var zc in remotes){var zs=remotes[zc];if(zs.lastInT!==undefined&&tickN-zs.lastInT>360){dbg('心跳超时移除 id='+zc+' lastInT='+zs.lastInT+' tickN='+tickN);var zix=snakes.indexOf(zs);if(zix>=0)snakes.splice(zix,1);delete remotes[zc];delete LAN.sentSeq[zc];}}}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){
@@ -783,7 +808,7 @@ for(var g2=0;g2<3;g2++){ctx.strokeStyle='hsla('+((hue0+g2*60)%360)+',90%,65%,'+(
 }else{
 ctx.strokeStyle=s.color;ctx.lineWidth=r*1.7;
 // 大蛇渲染抽稀: 点间距仅5px, 隔点连线视觉无差别, 大幅降低多蛇后期的描边开销
-var rst=s.pts.length>900?3:(s.pts.length>300?2:1);
+var rst=s.pts.length>1800?4:(s.pts.length>900?3:(s.pts.length>300?2:1));
 ctx.beginPath();
 ctx.moveTo(s.pts[s.pts.length-1].x,s.pts[s.pts.length-1].y);
 for(var i3=s.pts.length-2;i3>=0;i3-=rst)ctx.lineTo(s.pts[i3].x,s.pts[i3].y);
