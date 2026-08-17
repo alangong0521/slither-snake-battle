@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.6';
+var VERSION='3.7';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -184,7 +184,11 @@ var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:fal
 var ownHist=[];
 // 机内调试日志: 环形缓冲 + 游戏内面板(快速点小地图5次开关)
 var DBG=[],dbgOn=false,mapTapTs=[];
-function dbg(s){DBG.push(tickN+': '+s);if(DBG.length>300)DBG.shift();if(dbgOn)renderDbg();}
+function dbg(s){var w=new Date();var ts=('0'+w.getHours()).slice(-2)+':'+('0'+w.getMinutes()).slice(-2)+':'+('0'+w.getSeconds()).slice(-2);DBG.push(ts+' t'+tickN+' '+s);if(DBG.length>600)DBG.shift();if(dbgOn)renderDbg();}
+// 日志持久化: 每5秒落盘localStorage; 启动时把上次日志滚存为prev, 掉线重载/闪退后仍可复制上一局日志
+try{var __pl=localStorage.getItem('snake_log_cur');if(__pl)localStorage.setItem('snake_log_prev',__pl);}catch(e){}
+setInterval(function(){try{localStorage.setItem('snake_log_cur',JSON.stringify(DBG.slice(-300)));}catch(e){}},5000);
+dbg('启动 v'+VERSION);
 window.__lanLog=function(s){dbg('[net] '+s);};
 function renderDbg(){
 var p=$('dbgPanel');if(!p)return;
@@ -198,7 +202,7 @@ if(dbgOn&&!p){p=document.createElement('div');p.id='dbgPanel';
 p.style.cssText='position:fixed;left:6px;top:6px;z-index:99;background:rgba(0,0,0,0.82);color:#8f8;font-size:9px;padding:6px;border-radius:6px;max-width:72%;pointer-events:auto';
 p.innerHTML='<pre id="dbgPre" style="margin:0;max-height:38vh;overflow:hidden;white-space:pre-wrap"></pre><button id="dbgCopy" style="margin-top:4px;font-size:11px">复制日志</button><button id="dbgClose" style="margin-left:6px;font-size:11px">关闭</button>';
 document.body.appendChild(p);
-$('dbgCopy').onclick=function(){var t=($('dbgPre')?$('dbgPre').textContent:'')+'\n---\n'+DBG.join('\n');try{navigator.clipboard.writeText(t);}catch(e){var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e2){}document.body.removeChild(ta);}$('dbgCopy').textContent='已复制';};
+$('dbgCopy').onclick=function(){var prev='';try{var pl2=JSON.parse(localStorage.getItem('snake_log_prev')||'[]');if(pl2&&pl2.length)prev='\n=== 上一局日志(重载/闪退前) ===\n'+pl2.join('\n');}catch(e){}var t='版本 v'+VERSION+'\n'+($('dbgPre')?$('dbgPre').textContent:'')+'\n--- 本局完整日志 ---\n'+DBG.join('\n')+prev;try{navigator.clipboard.writeText(t);}catch(e){var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e2){}document.body.removeChild(ta);}$('dbgCopy').textContent='已复制';};
 $('dbgClose').onclick=function(){toggleDbg();};
 }
 if(!dbgOn&&p)p.remove();
@@ -258,12 +262,12 @@ lanSendTo(id,{t:'you',i:snakes.indexOf(rs),u:rs.uid});
 if(started)lanSendTo(id,{t:'start'});
 var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remotes).length+' 人，点「开始游戏」开局！';
 }
-else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;LAN.ownUid=m.u;}
+else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;LAN.ownUid=m.u;dbg('入局 ownUid='+m.u+' idx='+m.i);}
 else if(m.t==='in'&&LAN.mode===1&&remotes[id]){if(remotes[id].lastInT===undefined)dbg('首个上行 id='+id+' tickN='+tickN);remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;remotes[id].lastInT=tickN;}
 else if(m.t==='sk'&&LAN.mode===1&&remotes[id])activateSkill(remotes[id]);
 else if(m.t==='rs'&&LAN.mode===1){if(m.u!==undefined){delete (LAN.sentSeq[id]||{})[m.u];}else LAN.sentSeq[id]={};}
 else if(m.t==='hb'&&LAN.mode===1&&remotes[id]){remotes[id].lastInT=tickN;}
-else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
+else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){dbg('客机请求重生 id='+id);var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.mushs=[];rs2.mushDrain=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
 else if(m.t==='snap'&&LAN.mode===2){applySnap(m);}
 else if(m.t==='start'&&LAN.mode===2){clientEnter();}
 else if(m.t==='pz'){
@@ -379,8 +383,8 @@ if(om>120){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;LAN.tel
 else if(om>=20){ls.corrX=ox2;ls.corrY=oy2;LAN.corrN=(LAN.corrN||0)+1;}
 else LAN.corrSkip=(LAN.corrSkip||0)+1;
 }
-if(wasAlive&&!ls.alive){deaths++;sfxDie();showDeath();}
-if(!wasAlive&&ls.alive){var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveBtn'))ov.style.display='none';}
+if(wasAlive&&!ls.alive){deaths++;sfxDie();dbg('阵亡(主机快照) score='+ms.s);showDeath();}
+if(!wasAlive&&ls.alive){dbg('重生生效 score='+ms.s+' f='+ms.f);var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveBtn'))ov.style.display='none';}
 }
 }
 LAN.cSnakes=newArr;
@@ -593,6 +597,8 @@ s.alive=false;s.deadT=tickN;
 var dst=Math.max(3,Math.floor(s.pts.length/150));
 for(var i=0;i<s.pts.length;i+=dst)spawnFood(s.pts[i].x+rnd(-6,6),s.pts[i].y+rnd(-6,6),2);
 s.magT=s.shdT=s.zmT=s.x5T=s.fzT=0;s.skillN=0;s.killChain=0;
+// 死亡即清账: 蘑菇待回收额/待到期效果必须清零, 否则重生后回收逻辑把分数持续钉死在26(吃多少扣多少)
+s.mushs=[];s.mushDrain=0;
 if(killer&&killer!==s){
 killer.kills++;
 if(tickN-(killer.lastKillT||-9999)<480){killer.killChain=Math.min(5,(killer.killChain||0)+1);killer.score+=50*killer.killChain;}
@@ -887,8 +893,8 @@ o.innerHTML='<h3>你阵亡了</h3><p>本局长度 '+Math.floor(player.score)+' �
 $('reviveBtn').onclick=function(){revive();};
 }
 function revive(){
-if(LAN.mode===2){lanSend({t:'rv'});$('ovl').style.display='none';ac();musStart();return;}
-player.score=26;player.kills=0;aliveTicks=0;player.alive=true;player.grace=160;player.boost=false;boostIds={};mouseBoost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);player.snapFull=true;
+if(LAN.mode===2){dbg('点击再来一局, 发送rv');lanSend({t:'rv'});$('ovl').style.display='none';ac();musStart();return;}
+player.score=26;player.kills=0;player.mushs=[];player.mushDrain=0;aliveTicks=0;player.alive=true;player.grace=160;player.boost=false;boostIds={};mouseBoost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);player.snapFull=true;
 $('ovl').style.display='none';
 $('boostBtn').className='';
 ac();musStart();sfxStart();

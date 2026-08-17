@@ -75,6 +75,11 @@ if(tickN===800&&window.__CHAINTEST__){var kl=snakes[4];kl.alive=true;kl.killChai
 if(tickN===300&&window.__MUSHTEST__){window.__mushBase=player.score;player.grace=999999;powers.length=0;player.mushs=[];player.mushDrain=0;applyPower(player,'mush');slog('[TEST] mush plus='+Math.round(player.score-window.__mushBase));}
 if(tickN===1250&&window.__MUSHTEST__){slog('[TEST] mush mid drain='+(player.mushDrain||0));}
 if(tickN===1500&&window.__MUSHTEST__){slog('[TEST] mush end drain='+(player.mushDrain||0));}
+// T45: 蘑菇回收额未清时阵亡 → 重生后吃豆必须能增长(回收账死亡即清)
+if(tickN===1520&&window.__MUSHTEST__){player.mushDrain=480;player.mushs=[{t:tickN+30,v:500}];die(player,snakes[1]);slog('[TEST] dieWithDrain drainAfterDeath='+(player.mushDrain||0)+' mushs='+(player.mushs?player.mushs.length:-1));}
+if(tickN===1540&&window.__MUSHTEST__){revive();player.grace=999999;}
+if(tickN>=1550&&tickN<=1560&&window.__MUSHTEST__){var fh=player.pts[0];if(fh)for(var fi=0;fi<6;fi++)spawnFood(fh.x+rnd(-14,14),fh.y+rnd(-14,14),2);}
+if(tickN===1740&&window.__MUSHTEST__){slog('[TEST] afterRevive alive='+(player.alive?1:0)+' score='+Math.round(player.score)+' drain='+(player.mushDrain||0));}
 """
     g = src.replace('<body>', '<body><script>window.__AUTOPILOT__=true;window.__FORCE_FB__=true;'
         'window.__EATTEST__=true;window.__AURATEST__=true;window.__HEADTEST__=true;'
@@ -96,7 +101,7 @@ if(tickN===1500&&window.__MUSHTEST__){slog('[TEST] mush end drain='+(player.mush
     open(os.path.join(WORK, 'lan_sim3.html'), 'w', encoding='utf-8').write(sim)
 
 def solo_tests():
-    logs, _ = run_chromium('file://' + os.path.join(WORK, 'g.html'), 26000)
+    logs, _ = run_chromium('file://' + os.path.join(WORK, 'g.html'), 31000)
     joined = '\n'.join(logs)
     errs = [l for l in logs if l.startswith('[ERR]')]
     check('T01', '游戏启动/10蛇170豆', '[TEST] boot ok' in joined)
@@ -127,6 +132,11 @@ def solo_tests():
     m1 = re.search(r'mush plus=(\d+)', joined);mm = re.search(r'mush mid drain=(\d+)', joined);m2 = re.search(r'mush end drain=(\d+)', joined)
     check('T35', '蘑菇+500限时15秒后渐进恢复', m1 and int(m1.group(1)) == 500 and mm and 100 < int(mm.group(1)) < 500 and m2 and int(m2.group(1)) == 0,
           ' / '.join(x.group(0) if x else '无日志' for x in [m1, mm, m2]))
+    d1 = re.search(r'dieWithDrain drainAfterDeath=(\d+) mushs=(\d+)', joined)
+    d2 = re.search(r'afterRevive alive=(\d) score=(\d+) drain=(\d+)', joined)
+    check('T45', '带蘑菇回收额阵亡重生后吃豆能增长(不卡26)', d1 and d1.group(1) == '0' and d1.group(2) == '0'
+          and d2 and d2.group(1) == '1' and int(d2.group(2)) > 26 and int(d2.group(3)) == 0,
+          ' / '.join(x.group(0) if x else '无日志' for x in [d1, d2]))
 
 def view_tests():
     vals = []
