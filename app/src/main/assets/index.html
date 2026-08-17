@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.5';
+var VERSION='3.6';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -208,6 +208,8 @@ var remotes={},startHTML='';
 function lanSend(o){var s=JSON.stringify(o);if(window.Android&&Android.lanSend){try{Android.lanSend(s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,msg:s},'*');}catch(e){}}}
 function lanSendTo(cid,o){cid=parseInt(cid,10);var s=JSON.stringify(o);if(window.Android&&Android.lanSendTo){try{Android.lanSendTo(cid,s);}catch(e){}}else if(window.parent&&window.parent!==window){try{window.parent.postMessage({lan:1,to:cid,msg:s},'*');}catch(e){}}}
 window.__lanOnMsg=function(id,s){var m;try{m=JSON.parse(s);}catch(e){return;}try{lanOnMsg(id,m);}catch(e){slog('[ERR] lan '+(e&&e.message));}};
+// 合批入口: Java读线程把积压的多条消息一次注入(每条是完整JSON对象, 直接拼成数组), 背压越大合批越多, UI线程注入次数骤降
+window.__lanOnMsgs=function(id,arr){for(var bi=0;bi<arr.length;bi++){try{lanOnMsg(id,arr[bi]);}catch(e){slog('[ERR] lan '+(e&&e.message));}}};
 window.addEventListener('message',function(e){if(e.data&&e.data.lan)window.__lanOnMsg(e.data.from||0,e.data.msg);});
 window.__lanPeer=function(id,joined){
 dbg('peer id='+id+' joined='+joined);
@@ -259,7 +261,7 @@ var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remo
 else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;LAN.ownUid=m.u;}
 else if(m.t==='in'&&LAN.mode===1&&remotes[id]){if(remotes[id].lastInT===undefined)dbg('首个上行 id='+id+' tickN='+tickN);remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;remotes[id].lastInT=tickN;}
 else if(m.t==='sk'&&LAN.mode===1&&remotes[id])activateSkill(remotes[id]);
-else if(m.t==='rs'&&LAN.mode===1){LAN.sentSeq[id]={};}
+else if(m.t==='rs'&&LAN.mode===1){if(m.u!==undefined){delete (LAN.sentSeq[id]||{})[m.u];}else LAN.sentSeq[id]={};}
 else if(m.t==='hb'&&LAN.mode===1&&remotes[id]){remotes[id].lastInT=tickN;}
 else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
 else if(m.t==='snap'&&LAN.mode===2){applySnap(m);}
@@ -318,7 +320,8 @@ return{t:'snap',tk:tickN,pz:paused?1:0,sn:sn,fd:fd,pw:pw};
 function applySnap(m){
 LAN.snapRecv++;LAN.lastSnapTick=tickN;
 // 快照序号断档(发送队列丢旧保新会丢包) → 增量轨迹出现空洞, 请求全量重同步
-if(LAN.lastSnapTk>=0&&m.tk-LAN.lastSnapTk>3){LAN.gaps++;dbg('快照断档 +'+(m.tk-LAN.lastSnapTk)+' 请求重同步');lanSend({t:'rs'});}
+// 序号断档: 小断档靠逐蛇 pile 检测精准重同步自愈; 只有大断档(>20tick≈0.33s,    可能丢了重生/全量标记)才请求全场重同步
+if(LAN.lastSnapTk>=0&&m.tk-LAN.lastSnapTk>20){LAN.gaps++;dbg('快照大断档 +'+(m.tk-LAN.lastSnapTk)+' 请求全场重同步');lanSend({t:'rs'});}
 LAN.lastSnapTk=m.tk;
 if(!LAN.entered)clientEnter();
 // 暂停状态随快照广播(自愈, 防 pz 消息丢失导致从机永远卡在暂停)
@@ -404,7 +407,7 @@ player.boost=(Object.keys(boostIds).length>0)||mouseBoost;
 if(tickN-comboT>90)combo=0;
 if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;
 // 死亡后本地不再模拟移动(定格), 等主机快照/重生
-if(player.alive){player.__noRebuild=(player.vlen>500&&(tickN&1))?1:0;moveSnake(player);}
+if(player.alive)moveSnake(player);
 // 自身蛇头平滑校正: 快照到达时算出的误差分摊到数帧渐进应用, 消除周期性回拽
 if(player.alive&&(player.corrX||player.corrY)){var hh=player.pts[0];hh.x+=player.corrX*0.25;hh.y+=player.corrY*0.25;player.corrX*=0.75;player.corrY*=0.75;if(Math.abs(player.corrX)<0.1&&Math.abs(player.corrY)<0.1)player.corrX=player.corrY=0;
 if(player.trail.length){player.trail[0].x=hh.x;player.trail[0].y=hh.y;}}
@@ -422,10 +425,10 @@ var dc=Math.hypot(h.x,h.y),lim=WORLD_R-rad(s);
 if(dc>lim){var ux=h.x/dc,uy=h.y/dc;var vx=Math.cos(s.angle),vy=Math.sin(s.angle);var dot=vx*ux+vy*uy;if(dot>0){vx-=ux*dot;vy-=uy*dot;s.angle=Math.atan2(vy,vx);}h.x=ux*lim;h.y=uy*lim;}
 s.trail.unshift({x:h.x,y:h.y});
 s.predN=(s.predN||0)+1;
-s.__noRebuild=(s.vlen>500&&(tickN&1))?1:0;
+
 rebuildBody(s);
 // 本地轨迹弧长不足以覆盖身体(大分跳变) → 请求主机全量重同步
-if((s.__pile||0)>8&&tickN-(s.__rsT||-9999)>60){s.__rsT=tickN;lanSend({t:'rs'});}
+if((s.__pile||0)>8&&tickN-(s.__rsT||-9999)>60){s.__rsT=tickN;dbg('轨迹不足, 请求单蛇重同步 uid='+s.uid);lanSend({t:'rs',u:s.uid});}
 }
 for(var tf=0;tf<foods.length;tf++){var fo=foods[tf];if(fo.tx!==undefined){fo.x+=(fo.tx-fo.x)*0.35;fo.y+=(fo.ty-fo.y)*0.35;}}
 if(LAN.snapRecv===0&&tickN%90===0)lanSend({t:'hello',n:player.name,c:player.color});
@@ -527,7 +530,6 @@ if(tickN%15===0){var t2=s.pts[s.pts.length-1];spawnFood(t2.x+rnd(-4,4),t2.y+rnd(
 function rebuildBody(s){
 if(!s.trail.length)return;
 // 大蛇(>500)在客机上隔帧重建身体: 弧长遍历开销减半, 视觉无差别(头部照常每帧动)
-if(s.__noRebuild){s.__noRebuild=false;return;}
 if(s.vlen===undefined)s.vlen=s.score;
 if(s.score>s.vlen){var gr=Math.max(0.35,(s.score-s.vlen)*0.03);s.vlen=Math.min(s.score,s.vlen+gr);}
 else if(s.score<s.vlen)s.vlen=Math.max(s.score,s.vlen-Math.max(0.6,(s.vlen-s.score)*0.05));
@@ -679,7 +681,7 @@ if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
 if(LAN.mode===1){var anyR=false;var withFd=tickN%6===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
 // 心跳超时兜底: 6秒无任何上行消息的客机按僵尸连接移除(Java层另有5秒读超时)
-if(LAN.mode===1&&tickN%60===0){for(var zc in remotes){var zs=remotes[zc];if(zs.lastInT!==undefined&&tickN-zs.lastInT>360){dbg('心跳超时移除 id='+zc+' lastInT='+zs.lastInT+' tickN='+tickN);var zix=snakes.indexOf(zs);if(zix>=0)snakes.splice(zix,1);delete remotes[zc];delete LAN.sentSeq[zc];}}}
+if(LAN.mode===1&&tickN%60===0){for(var zc in remotes){var zs=remotes[zc];if(zs.lastInT!==undefined&&tickN-zs.lastInT>900){dbg('心跳超时移除 id='+zc+' lastInT='+zs.lastInT+' tickN='+tickN);var zix=snakes.indexOf(zs);if(zix>=0)snakes.splice(zix,1);delete remotes[zc];delete LAN.sentSeq[zc];}}}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
 if(window.__HEADTEST__){
 if(tickN===200){

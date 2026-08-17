@@ -118,8 +118,8 @@ public class MainActivity extends Activity {
                     while (running) {
                         Socket s = ss.accept();
                         s.setTcpNoDelay(true);
-                        // 5秒读超时: 客机每帧都有上行消息, 超时即为半开死连接
-                        s.setSoTimeout(5000);
+                        // 5秒读超时: 客机每秒有心跳, 10秒无上行即为半开死连接
+                        s.setSoTimeout(10000);
                         final int id = nextId++;
                         netLog("accept id=" + id);
                         try {
@@ -165,7 +165,17 @@ public class MainActivity extends Activity {
                 BufferedReader br = new BufferedReader(new InputStreamReader(c.sock.getInputStream(), "UTF-8"));
                 String line;
                 while (running && c.alive && (line = br.readLine()) != null) {
-                    final String js = "window.__lanOnMsg(" + id + "," + JSONObject.quote(line) + ")";
+                    // 合批: 每行本身是完整JSON对象, 直接把积压的行拼成JSON数组一次注入JS,
+                    // 避免60Hz快照每条一次evaluateJavascript把对方UI线程淹没(真机卡顿/掉线根因)
+                    StringBuilder batch = new StringBuilder("[").append(line);
+                    int bn = 1;
+                    while (bn < 32 && br.ready()) {
+                        String more = br.readLine();
+                        if (more == null) break;
+                        batch.append(',').append(more);
+                        bn++;
+                    }
+                    final String js = "window.__lanOnMsgs(" + id + "," + batch.append(']') + ")";
                     ui.post(() -> wv.evaluateJavascript(js, null));
                 }
             } catch (Exception e) { why = String.valueOf(e.getMessage()); }

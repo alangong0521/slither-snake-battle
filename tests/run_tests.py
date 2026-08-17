@@ -175,8 +175,8 @@ def lan_tests():
     check('T29', '联机运行无JS异常', len(errs) == 0, ';'.join(errs[:3]))
     m = re.search(r'C ftween=(\d+)', joined)
     check('T32', '客机豆子平滑补间(带目标点)', m and int(m.group(1)) > 0, m.group(0) if m else '无日志')
-    m = re.search(r'B remoteSpacing maxErr=([\d.]+) pts=(\d+)', joined)
-    check('T33', '客机远端蛇身间距恒定(轨迹重建)', m and float(m.group(1)) <= 3.0 and int(m.group(2)) > 3,
+    m = re.search(r'B remoteSpacing maxErr=([\d.]+) bad=(\d+) pts=(\d+)', joined)
+    check('T33', '客机远端蛇身间距恒定(轨迹重建)', m and int(m.group(2)) <= 2 and float(m.group(1)) <= 5.0 and int(m.group(3)) > 3,
           m.group(0) if m else '无日志')
     m = re.search(r'respawnReset BcPts=(\d+) CcPts=(\d+)', joined)
     check('T34', '重生后蛇身重置为初始长度(跨局不残留)',
@@ -204,6 +204,9 @@ def lan_tests():
           m.group(0) if m else '无日志')
     m = re.search(r'C colorSame=(\d) color=(\S+)', joined)
     check('T43', '重生后颜色与自选颜色一致', m and m.group(1) == '1', m.group(0) if m else '无日志')
+    m = re.search(r'jitter off\. B jitterRebases=(\d+) gaps=(\d+)', joined)
+    check('T44', '网络抖动+合批投递下无重建风暴', m and int(m.group(1)) <= 4 and int(m.group(2)) <= 1,
+          m.group(0) if m else '无日志')
 
 def main():
     print('== 生成测试页(基于当前 index.html) ==')

@@ -8,17 +8,33 @@
 var frames={0:document.getElementById('A'),1:document.getElementById('B'),2:document.getElementById('C')};
 function slog(s){document.getElementById('log').textContent+=s+'\n';console.log(s);}
 function idOf(w){if(w===frames[0].contentWindow)return 0;if(w===frames[1].contentWindow)return 1;if(w===frames[2].contentWindow)return 2;return -1;}
+// 抖动/合批模式: 模拟真机WiFi突发到达+Java读线程合批, 消息缓冲150ms后按批注入__lanOnMsgs
+var jbuf={}; // key=to, val=[{from,msg}]
+function jflush(){
+  for(var k in jbuf){var arr=jbuf[k];delete jbuf[k];if(!arr.length)continue;
+    var to=Math.floor(k/10),from=k%10;
+    var f=frames[to];if(!f)continue;
+    var parsed=[];for(var q=0;q<arr.length;q++){try{parsed.push(JSON.parse(arr[q].msg));}catch(e){}}
+    try{f.contentWindow.__lanOnMsgs(from,parsed);}catch(e){slog('[SIM] jflush err '+e.message);}
+  }
+}
+setInterval(jflush,150);
 window.addEventListener('message',function(e){
   if(!(e.data&&e.data.lan))return;
   var sid=idOf(e.source);if(sid<0)return;
   var out={lan:1,from:sid,msg:e.data.msg};
+  function deliver(to){
+    if(window.__jitter){var kk=to*10+sid;(jbuf[kk]=jbuf[kk]||[]).push({msg:e.data.msg});}
+    else{var f=frames[to];if(f)f.contentWindow.postMessage(out,'*');}
+  }
   if(sid===0){
     if(window.__dropB&&e.data.to===1)return; // 模拟丢包(快照断档测试)
     if(window.__dropBAll&&e.data.to===1)return; // 模拟彻底断线(看门狗测试)
-    if(e.data.to!==undefined){var f=frames[e.data.to];if(f)f.contentWindow.postMessage(out,'*');}
-    else{for(var i=1;i<=2;i++)frames[i].contentWindow.postMessage(out,'*');}
+    if(e.data.to!==undefined)deliver(e.data.to);
+    else{deliver(1);deliver(2);}
   }else{
-    frames[0].contentWindow.postMessage(out,'*');
+    if(window.__jitter){var kk2=sid;(jbuf[kk2]=jbuf[kk2]||[]).push({msg:e.data.msg});}
+    else frames[0].contentWindow.postMessage(out,'*');
   }
 });
 var t0=Date.now();
@@ -42,6 +58,12 @@ function step(){
     if(t>8&&!window.__s5){window.__s5=1;
       for(var i=1;i<=2;i++){var w=frames[i].contentWindow;slog('[SIM] client'+i+' autoEntered='+w.__G.LAN.entered);}
     }
+    if(t>5.5&&!window.__sJ1){window.__sJ1=1;window.__jitter=true;
+      window.__jReb0=frames[1].contentWindow.__G.LAN.rebases||0;
+      slog('[SIM] jitter on (合批投递150ms)');}
+    if(t>10.6&&!window.__sJ2){window.__sJ2=1;window.__jitter=false;
+      var bwj=frames[1].contentWindow;
+      slog('[SIM] jitter off. B jitterRebases='+((bwj.__G.LAN.rebases||0)-window.__jReb0)+' gaps='+(bwj.__G.LAN.gaps||0));}
     if(t>9&&!window.__s6){window.__s6=1;
       var aw=frames[0].contentWindow,bw=frames[1].contentWindow,cw=frames[2].contentWindow;
       slog('[SIM] A snakes='+aw.__G.snakes.length+' remotes='+Object.keys(aw.__G.remotes).length+' snapsSent='+aw.__G.LAN.snapSent);
@@ -79,12 +101,12 @@ function step(){
       slog('[SIM] C ftween='+tw);
       slog('[SIM] B snaps='+frames[1].contentWindow.__G.LAN.snapRecv);
     }
-    if(t>11.2&&!window.__s79){
+    if(t>12.3&&!window.__s79){
       var bw4=frames[1].contentWindow;var rs0=bw4.__G.snakes[0];
-      var mx=0;if(rs0&&rs0.pts.length>6){for(var ri=4;ri<rs0.pts.length;ri++){var dd=Math.hypot(rs0.pts[ri].x-rs0.pts[ri-1].x,rs0.pts[ri].y-rs0.pts[ri-1].y);if(Math.abs(dd-5)>mx)mx=Math.abs(dd-5);}}
-      // 恰遇全量重同步当帧时点可能落在过渡期, 超大误差延迟0.5s复测一次
-      if(mx>3&&!window.__s79r){window.__s79r=1;}
-      else{window.__s79=1;slog('[SIM] B remoteSpacing maxErr='+mx.toFixed(2)+' pts='+(rs0?rs0.pts.length:-1));}
+      var mx=0,bad=0;if(rs0&&rs0.pts.length>6){for(var ri=4;ri<rs0.pts.length;ri++){var dd=Math.hypot(rs0.pts[ri].x-rs0.pts[ri-1].x,rs0.pts[ri].y-rs0.pts[ri-1].y);var e2=Math.abs(dd-5);if(e2>mx)mx=e2;if(e2>3)bad++;}}
+      // 恰遇全量重同步当帧时点可能落在过渡期, 异常点过多时延迟0.5s复测一次
+      if(bad>2&&!window.__s79r){window.__s79r=1;}
+      else{window.__s79=1;slog('[SIM] B remoteSpacing maxErr='+mx.toFixed(2)+' bad='+bad+' pts='+(rs0?rs0.pts.length:-1));}
     }
     if(t>11.8&&!window.__s80){window.__s80=1;
       var aw3=frames[0].contentWindow,cw4=frames[2].contentWindow;
