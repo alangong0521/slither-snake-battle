@@ -88,7 +88,10 @@ if(tickN===1740&&window.__MUSHTEST__){slog('[TEST] afterRevive alive='+(player.a
     g = g.replace('if(window.__EATTEST__){', probes + '\nif(window.__EATTEST__){', 1)
     open(os.path.join(WORK, 'g.html'), 'w', encoding='utf-8').write(g)
     # ---- 联机节点页 ----
-    fb = src.replace('<body>', '<body><script>window.__FORCE_FB__=true;window.__LANTEST__=true;window.__AUTOPILOT__=true;</script>', 1)
+    fb = src.replace('<body>', '<body><script>(function(){var p="LS_"+(window.name||"")+"_",o=window.localStorage;'
+        'Object.defineProperty(window,"localStorage",{get:function(){return{getItem:function(k){return o.getItem(p+k)},'
+        'setItem:function(k,v){o.setItem(p+k,v)},removeItem:function(k){o.removeItem(p+k)},clear:function(){o.clear()}}}});})();'
+        'window.__FORCE_FB__=true;window.__LANTEST__=true;window.__AUTOPILOT__=true;</script>', 1)
     fb = fb.replace("init();\n})();",
         "init();\nwindow.__G={get LAN(){return LAN},get player(){return player},get snakes(){return snakes},"
         "get foods(){return foods},get cv(){return cv},get remotes(){return remotes},get tickN(){return tickN},"
@@ -196,8 +199,8 @@ def lan_tests():
     check('T37', '自身蛇无持续拖拽校正(死区生效)', m and int(m.group(2)) <= 60, m.group(0) if m else '无日志')
     m = re.search(r'B gaps=(\d+) rebases=(\d+)', joined)
     check('T38', '快照断档自动请求全量重同步', m and int(m.group(1)) >= 1 and int(m.group(2)) >= 1, m.group(0) if m else '无日志')
-    m = re.search(r'B watchdog=(\d+) dead=(\d)', joined)
-    check('T39', '断线看门狗弹窗(无僵尸局)', m and m.group(1) == '1' and m.group(2) == '1', m.group(0) if m else '无日志')
+    m = re.search(r'B autoRejoin tryN=(\d+)', joined)
+    check('T39', '断线看门狗触发自动重连(无僵尸局)', m and int(m.group(1)) >= 1, m.group(0) if m else '无日志')
     # ---- v3.5 回归 ----
     mb = re.search(r'B pause2OK snapLive=(\d) paused=(\d)', joined)
     mc = re.search(r'C pause2OK snapLive=(\d) paused=(\d)', joined)
@@ -214,8 +217,11 @@ def lan_tests():
           m.group(0) if m else '无日志')
     m = re.search(r'C colorSame=(\d) color=(\S+)', joined)
     check('T43', '重生后颜色与自选颜色一致', m and m.group(1) == '1', m.group(0) if m else '无日志')
-    m = re.search(r'jitter off\. B jitterRebases=(\d+) gaps=(\d+)', joined)
-    check('T44', '网络抖动+合批投递下无重建风暴', m and int(m.group(1)) <= 4 and int(m.group(2)) <= 1,
+    m = re.search(r'jitter off\. B jitterRebases=(\d+) gaps=(\d+) teleports=(\d+)', joined)
+    check('T44', '网络抖动+合批投递下无重建风暴/无瞬移', m and int(m.group(1)) <= 4 and int(m.group(2)) <= 1 and int(m.group(3)) <= 1,
+          m.group(0) if m else '无日志')
+    m = re.search(r'B rejoined entered=(\d) alive=(\d) name=(\S+)', joined)
+    check('T48', '彻底断线后自动重连回到游戏', m and m.group(1) == '1' and m.group(2) == '1' and m.group(3) == '客机B',
           m.group(0) if m else '无日志')
 
 def main():

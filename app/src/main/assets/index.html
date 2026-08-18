@@ -91,7 +91,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.7';
+var VERSION='3.8';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -149,6 +149,7 @@ s.bornT=tickN;
 }
 function norm(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;}
 var AC=null,sfxOn=true,musOn=true,combo=0,comboT=0,prevPBoost=false;
+var camX=null,camY=0;
 try{var ap=JSON.parse(localStorage.getItem('snake_audio')||'null');if(ap){sfxOn=ap.s!==false;musOn=ap.m!==false;}}catch(e){}
 function saveAP(){try{localStorage.setItem('snake_audio',JSON.stringify({s:sfxOn,m:musOn}));}catch(e){}}
 function ac(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}if(AC&&AC.state==='suspended'){try{AC.resume();}catch(e){}}return AC;}
@@ -246,6 +247,8 @@ $('connBtn').onclick=function(){
 var ip=($('ipInput').value||'').trim();if(!ip)return;
 var nm2=($('nameInput').value||'').trim();if(nm2)player.name=nm2;
 player.color=pColor;
+// 留存房间信息, 掉线后自动重连用
+try{localStorage.setItem('snake_rejoin',JSON.stringify({ip:ip,n:player.name,c:player.color,tryN:0}));}catch(e){}
 LAN.mode=2;li.textContent='正在连接 '+ip+' …';
 if(window.Android&&Android.lanJoin){try{Android.lanJoin(ip,7799);}catch(e){li.textContent='连接失败';}}
 else{window.__lanStatus('connected');}
@@ -253,9 +256,12 @@ else{window.__lanStatus('connected');}
 }
 function lanOnMsg(id,m){
 if(m.t==='hello'&&LAN.mode===1){
+dbg('hello id='+id+' n='+m.n);
 var rs=remotes[id];
 if(!rs){rs=mkSnake(m.n||'玩家'+(id+1),m.c||'#ff7b72',false);rs.remote=true;rs.isHuman=true;snakes.push(rs);remotes[id]=rs;}
-else{rs.name=m.n||rs.name;rs.color=m.c||rs.color;}
+else{rs.name=m.n||rs.name;rs.color=m.c||rs.color;rs.lastInT=tickN;
+// 重连hello(旧蛇还在且已死): 重置复活, 让掉线/重进的玩家立即回到游戏
+if(started&&!rs.alive){dbg('客机重连重置 id='+id);rs.score=26;rs.kills=0;rs.mushs=[];rs.mushDrain=0;rs.alive=true;rs.grace=160;rs.angle=rnd(0,6.28);rs.tAngle=rs.angle;rs.vlen=26;rs.pts.length=0;rs.trail.length=0;place(rs);rs.snapFull=true;}}
 LAN.sentSeq[id]={};
 fixColorConflicts();
 lanSendTo(id,{t:'you',i:snakes.indexOf(rs),u:rs.uid});
@@ -278,6 +284,9 @@ else if(LAN.mode===2){paused=!!m.on;$('pauseBtn').textContent=paused?'继续':'�
 function showLanDead(){
 if(LAN.mode!==2||!LAN.entered||LAN.dead)return;
 LAN.dead=true;dbg('掉线弹窗');
+// 优先自动重连(最多2次): 重载页面→启动时按留存信息自动回房, 不再直接把玩家踢出游戏
+try{var rj=JSON.parse(localStorage.getItem('snake_rejoin')||'null');
+if(rj&&rj.ip&&(rj.tryN===undefined||rj.tryN<2)){rj.tryN=(rj.tryN||0)+1;rj.go=1;localStorage.setItem('snake_rejoin',JSON.stringify(rj));dbg('自动重连 第'+rj.tryN+'次');try{if(window.Android&&Android.lanStop)Android.lanStop();}catch(e){}location.reload();return;}}catch(e){}
 var o=$('ovl');
 o.style.display='flex';
 o.innerHTML='<h3>与主机的连接已断开</h3><p>本局数据已失效，请重新加入房间</p><button class="btn" id="deadBtn">返回主页</button>';
@@ -338,6 +347,9 @@ var newArr=[];
 for(var i=0;i<m.sn.length;i++){var ms=m.sn[i];var ls=(ms.u!==undefined)?byUid[ms.u]:LAN.cSnakes[i];
 if(!ls){
 ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,predN:0,bornT:tickN};
+// 本地无此蛇对象却收到增量(典型: 重连后旧会话快照先到): 先用蛇头占位防渲染崩溃, 并请求该蛇全量
+if(ms.hh){ls.trail.push({x:ms.hh[0],y:ms.hh[1]});ls.pts.push({x:ms.hh[0],y:ms.hh[1]});}
+if(!ms.f)lanSend({t:'rs',u:ms.u});
 }
 ls.uid=ms.u;
 newArr.push(ls);
@@ -364,7 +376,11 @@ rebuildBody(ls);
 }else if(!isOwn){
 // 增量: 先撤掉本地预测点, 再拼上权威轨迹增量, 头部向权威位置收敛
 var pn=ls.predN||0;while(pn-->0&&ls.trail.length>1)ls.trail.shift();
-if(ms.tr)for(var q=ms.tr.length-2;q>=0;q-=2)ls.trail.unshift({x:ms.tr[q],y:ms.tr[q+1]});
+var nNew=0;
+if(ms.tr){nNew=ms.tr.length/2;for(var q=ms.tr.length-2;q>=0;q-=2)ls.trail.unshift({x:ms.tr[q],y:ms.tr[q+1]});}
+// 缝合处平滑: 丢包留下的轨迹洞会让新旧轨迹错位出折角(幽灵轨迹), 对缝合作拉普拉斯平滑
+if(nNew>0&&ls.trail.length>nNew+1){var sm0=Math.max(1,nNew-2),sm1=Math.min(ls.trail.length-2,nNew+5);
+for(var si2=sm0;si2<=sm1;si2++){var p0=ls.trail[si2-1],p1=ls.trail[si2],p2=ls.trail[si2+1];p1.x=(p0.x+p2.x)*0.25+p1.x*0.5;p1.y=(p0.y+p2.y)*0.25+p1.y*0.5;}}
 ls.predN=0;
 if(ms.hh&&ls.trail.length){var t0=ls.trail[0];t0.x+=(ms.hh[0]-t0.x)*0.35;t0.y+=(ms.hh[1]-t0.y)*0.35;
 if(ls.pts.length){var hp=ls.pts[0];hp.x+=(t0.x-hp.x)*0.35;hp.y+=(t0.y-hp.y)*0.35;}}
@@ -765,6 +781,8 @@ var VIEW_W=900;
 function render(){
 ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
 var focus=player?player.pts[0]:{x:0,y:0};
+// 镜头平滑跟随: 校正/重生等蛇头突变不再表现为整屏猛抖, 正常游动滞后仅1-2px无感
+if(focus){if(camX===null||Math.hypot(focus.x-camX,focus.y-camY)>400){camX=focus.x;camY=focus.y;}else{camX+=(focus.x-camX)*0.35;camY+=(focus.y-camY)*0.35;}focus={x:camX,y:camY};}
 var z0=zoomOf(player||{score:26});
 var sc=W/VIEW_W;
 var zoom=sc*z0;
@@ -797,7 +815,7 @@ ctx.font='12px sans-serif';ctx.textAlign='center';
 var topSnake=null,topSc=-1;
 for(var tk=0;tk<snakes.length;tk++){var ts=snakes[tk];if(ts.alive&&ts.score>topSc){topSc=ts.score;topSnake=ts;}}
 for(var k=0;k<snakes.length;k++){var s=snakes[k];if(!s.alive)continue;
-var h=s.pts[0];
+var h=s.pts[0];if(!h)continue;
 if(dist(h.x,h.y,focus.x,focus.y)>(vw+vh)+s.pts.length*SP)continue;
 var r=rad(s);
 var bornA=1;if(s.bornT!==undefined&&tickN-s.bornT<40){bornA=0.1+0.9*(tickN-s.bornT)/40;ctx.globalAlpha=bornA;}
@@ -854,7 +872,7 @@ mc.beginPath();mc.arc(half,half,mr,0,6.29);mc.stroke();
 for(var i=0;i<snakes.length;i++){
 var s=snakes[i];
 if(!s.alive)continue;
-var h=s.pts[0];
+var h=s.pts[0];if(!h)continue;
 var x=half+h.x*k,y=half+h.y*k;
 var isMe=(s===player);
 var isOther=(!isMe&&(s.isPlayer||s.isHuman));
@@ -1051,6 +1069,14 @@ for(var i2=0;i2<AI_N;i2++){var ai=mkSnake(NAMES[i2%NAMES.length],aiColorFree(),f
 updateHUD();
 bindStartUI();
 startHTML=$('ovl').innerHTML;
+// 断线自动重连: 看门狗/半开断开后页面重载, 按留存信息直接回房间(首个快照到达即自动入局)
+try{var rj0=JSON.parse(localStorage.getItem('snake_rejoin')||'null');
+if(rj0&&rj0.go&&rj0.ip){rj0.go=0;localStorage.setItem('snake_rejoin',JSON.stringify(rj0));
+player.name=rj0.n||player.name;player.color=rj0.c||player.color;pColor=player.color;
+LAN.mode=2;dbg('自动重连中 ip='+rj0.ip);
+if(window.Android&&Android.lanJoin){try{Android.lanJoin(rj0.ip,7799);}catch(e){}}
+else{window.__lanStatus('connected');}
+var li9=$('lanInfo');if(li9)li9.textContent='连接已断开，正在自动重连…';}}catch(e){}
 if(AUTO||window.__EATTEST__){started=true;$('ovl').style.display='none';slog('[TEST] boot ok, snakes='+snakes.length+' foods='+foods.length);try{localStorage.setItem('__t','1');localStorage.removeItem('__t');slog('[TEST] ls=ok');}catch(e){slog('[TEST] ls=blocked');}ac();musStart();}
 if(window.__FORCE_FB__){loop();}else{try{requestAnimationFrame(frame);}catch(e){}}
 setTimeout(function(){if(!rafOn&&!fbOn)loop();},600);

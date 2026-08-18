@@ -58,6 +58,8 @@ public class MainActivity extends Activity {
             final Socket sock;
             final PrintWriter out;
             final LinkedBlockingQueue<String> sendQ = new LinkedBlockingQueue<>(256);
+            final StringBuilder pend = new StringBuilder();
+            volatile boolean posted = false;
             volatile boolean alive = true;
 
             ClientConn(Socket s) throws Exception {
@@ -165,18 +167,29 @@ public class MainActivity extends Activity {
                 BufferedReader br = new BufferedReader(new InputStreamReader(c.sock.getInputStream(), "UTF-8"));
                 String line;
                 while (running && c.alive && (line = br.readLine()) != null) {
-                    // 合批: 每行本身是完整JSON对象, 直接把积压的行拼成JSON数组一次注入JS,
-                    // 避免60Hz快照每条一次evaluateJavascript把对方UI线程淹没(真机卡顿/掉线根因)
-                    StringBuilder batch = new StringBuilder("[").append(line);
-                    int bn = 1;
-                    while (bn < 32 && br.ready()) {
-                        String more = br.readLine();
-                        if (more == null) break;
-                        batch.append(',').append(more);
-                        bn++;
+                    // 有界缓冲+合批: 每行本身是完整JSON对象, 直接拼进待注入缓冲区;
+                    // UI线程未消化时不新排队(只追加到同一批次), 背压自动转合批, 消息永不无限堆积
+                    // (无界ui.post队列曾让从机渲染越来越旧的快照→卡顿/瞬移/超时掉线)
+                    synchronized (c.pend) {
+                        if (c.pend.length() > 0) c.pend.append(',');
+                        c.pend.append(line);
+                        int bn = 1;
+                        while (bn < 64 && br.ready()) {
+                            String more = br.readLine();
+                            if (more == null) break;
+                            c.pend.append(',').append(more);
+                            bn++;
+                        }
                     }
-                    final String js = "window.__lanOnMsgs(" + id + "," + batch.append(']') + ")";
-                    ui.post(() -> wv.evaluateJavascript(js, null));
+                    if (!c.posted) {
+                        c.posted = true;
+                        ui.post(() -> {
+                            String body;
+                            synchronized (c.pend) { body = c.pend.toString(); c.pend.setLength(0); }
+                            c.posted = false;
+                            wv.evaluateJavascript("window.__lanOnMsgs(" + id + ",[" + body + "])", null);
+                        });
+                    }
                 }
             } catch (Exception e) { why = String.valueOf(e.getMessage()); }
             netLog("read end id=" + id + " why=" + why);
