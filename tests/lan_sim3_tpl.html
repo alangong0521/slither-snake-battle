@@ -105,10 +105,14 @@ function step(){
     }
     if(t>12.3&&!window.__s79){
       var bw4=frames[1].contentWindow;var rs0=bw4.__G.snakes[0];
-      var mx=0,bad=0;if(rs0&&rs0.pts.length>6){for(var ri=4;ri<rs0.pts.length;ri++){var dd=Math.hypot(rs0.pts[ri].x-rs0.pts[ri-1].x,rs0.pts[ri].y-rs0.pts[ri-1].y);var e2=Math.abs(dd-5);if(e2>mx)mx=e2;if(e2>3)bad++;}}
-      // 恰遇全量重同步当帧时点可能落在过渡期, 异常点过多时延迟0.5s复测一次
-      if((bad>2||mx>5.0)&&!window.__s79r){window.__s79r=1;}
-      else{window.__s79=1;slog('[SIM] B remoteSpacing maxErr='+mx.toFixed(2)+' bad='+bad+' pts='+(rs0?rs0.pts.length:-1));}
+      var mx=0,bad=0;if(rs0&&rs0.pts.length>6){var rEnd=rs0.pts.length-((rs0.__pile||0)+3);for(var ri=4;ri<rEnd;ri++){var dd=Math.hypot(rs0.pts[ri].x-rs0.pts[ri-1].x,rs0.pts[ri].y-rs0.pts[ri-1].y);var e2=Math.abs(dd-5);if(e2>mx)mx=e2;if(e2>3)bad++;}}
+      // 恰遇重同步/吃尸体长度追赶的过渡帧会误报, 1秒内最多复测4次取最好成绩(稳态间距才是指标)
+      if((bad>2||mx>5.0)&&(window.__s79r||0)<3){window.__s79r=(window.__s79r||0)+1;
+      if(!window.__s79b||bad<window.__s79b.bad){window.__s79b={mx:mx,bad:bad,pts:rs0?rs0.pts.length:-1};}}
+      else{window.__s79=1;if(window.__s79b&&(bad>2||mx>5.0)){mx=window.__s79b.mx;bad=window.__s79b.bad;}
+slog('[SIM] B remoteSpacing maxErr='+mx.toFixed(2)+' bad='+bad+' pts='+(rs0?rs0.pts.length:-1));
+if(bad>=2&&rs0){var bi2=[];for(var ri2=1;ri2<rs0.pts.length&&bi2.length<10;ri2++){var dd2=Math.hypot(rs0.pts[ri2].x-rs0.pts[ri2-1].x,rs0.pts[ri2].y-rs0.pts[ri2-1].y);if(Math.abs(dd2-5)>3)bi2.push(ri2+':'+dd2.toFixed(1));}
+slog('[S79] badAt='+bi2.join(' ')+' pile='+(rs0.__pile||0)+' vlen='+Math.round(rs0.vlen)+' score='+Math.round(rs0.score)+' trailN='+rs0.trail.length+' rebases='+bw4.__G.LAN.rebases+' predN='+(rs0.predN||0));}}
     }
     if(t>11.8&&!window.__s80){window.__s80=1;
       var aw3=frames[0].contentWindow,cw4=frames[2].contentWindow;

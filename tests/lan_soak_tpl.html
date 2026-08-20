@@ -1,0 +1,69 @@
+<!DOCTYPE html><html><body>
+<div id="log" style="display:none"></div>
+<iframe id="A" name="F0" src="__FB_PATH__" width="400" height="260"></iframe>
+<iframe id="B" name="F1" src="__FB_PATH__" width="400" height="260"></iframe>
+<script>
+// 联机长程耐久: A=主机 B=客机, 全程150ms抖动合批, t=30s起蛇身拉到1500分, 跑12分钟
+var frames={0:document.getElementById('A'),1:document.getElementById('B')};
+function slog(s){document.getElementById('log').textContent+=s+'\n';console.log(s);}
+function idOf(w){if(w===frames[0].contentWindow)return 0;if(w===frames[1].contentWindow)return 1;return -1;}
+window.__jitter=1;
+var jbuf={};
+function jflush(){
+  for(var k in jbuf){var arr=jbuf[k];delete jbuf[k];if(!arr.length)continue;
+    var to=Math.floor(k/10),from=k%10;
+    var f=frames[to];if(!f)continue;
+    var parsed=[];for(var q=0;q<arr.length;q++){try{parsed.push(JSON.parse(arr[q].msg));}catch(e){}}
+    try{f.contentWindow.__lanOnMsgs(from,parsed);}catch(e){slog('[SIM] jflush err '+e.message);}
+  }
+}
+setInterval(jflush,150);
+window.addEventListener('message',function(e){
+  if(!(e.data&&e.data.lan))return;
+  var sid=idOf(e.source);if(sid<0)return;
+  if(sid===0){
+    var to=(e.data.to!==undefined)?e.data.to:1;
+    var kk=to*10+sid;(jbuf[kk]=jbuf[kk]||[]).push({msg:e.data.msg});
+  }else{
+    var kk2=sid;(jbuf[kk2]=jbuf[kk2]||[]).push({msg:e.data.msg});
+  }
+});
+var t0=Date.now();
+function step(){
+  var t=(Date.now()-t0)/1000;
+  try{
+    if(t>1&&!window.__s1){try{var aw=frames[0].contentWindow;var ni=aw.document.getElementById('nameInput');var hb=aw.document.getElementById('hostBtn');if(ni&&hb){window.__s1=1;ni.value='主机';hb.click();slog('[SIM] A host clicked');}}catch(e){}}
+    if(t>2.5&&!window.__s2){try{var w=frames[1].contentWindow;var ni2=w.document.getElementById('nameInput');var jb=w.document.getElementById('joinBtn');
+      if(ni2&&jb){ni2.value='客机B';jb.click();window.__s2=1;
+        setTimeout(function(){try{var ip=w.document.getElementById('ipInput');var cb=w.document.getElementById('connBtn');ip.value='10.0.0.1';cb.click();slog('[SIM] B join clicked');}catch(e){}},400);}}catch(e){}}
+    if(t>6&&!window.__s4){try{var sb=frames[0].contentWindow.document.getElementById('startBtn');if(sb){window.__s4=1;sb.click();slog('[SIM] A start clicked');}}catch(e){}}
+    if(t>30&&!window.__s5){window.__s5=1;
+      try{var aw2=frames[0].contentWindow;var sn=aw2.__G.snakes;for(var i=0;i<sn.length;i++){sn[i].score=1000;sn[i].vlen=1000;}slog('[SIM] inflated 1000');}catch(e){slog('[SIM] inflate err '+e.message);}}
+    if(t>300&&!window.__s5b){window.__s5b=1;
+      try{var aw2b=frames[0].contentWindow;var snb=aw2b.__G.snakes;for(var ib=0;ib<snb.length;ib++){snb[ib].score=3000;snb[ib].vlen=3000;}slog('[SIM] inflated 3000');
+      var bwL=frames[1].contentWindow;var LL=bwL.__G.LAN;slog('[SOAKLAN] stage1000 jerk='+((LL.__jerkN||0))+'/'+(LL.__tickC||1)+' corr='+(LL.corrN||0)+' tp='+(LL.teleports||0));LL.__jerkN=0;LL.__tickC=0;}catch(e){slog('[SIM] inflate2 err '+e.message);}}
+    if(t>60&&t<720&&t%120<0.6&&!window['__lg'+(t/120|0)]){window['__lg'+(t/120|0)]=1;
+      try{var bw=frames[1].contentWindow;var L=bw.__G.LAN;
+      slog('[SOAKLAN] t='+(t|0)+'s snaps='+L.snapRecv+' rebases='+L.rebases+' gaps='+(L.gaps||0)+' teleports='+(L.teleports||0)+' dead='+(L.dead?1:0)+' bScore='+Math.floor(bw.__G.player.score)+' bAlive='+(bw.__G.player.alive?1:0));}catch(e){slog('[SIM] lg err '+e.message);}}
+    if(t>735&&!window.__s9){window.__s9=1;
+      try{
+        var bw2=frames[1].contentWindow;var L2=bw2.__G.LAN;
+        // 客机视角远端蛇身锐角扫描
+        var kinkN=0,maxK=0;
+        var sn2=bw2.__G.snakes;
+        for(var si=0;si<sn2.length;si++){var s=sn2[si];if(!s.alive||s===bw2.__G.player)continue;var pp=s.pts;
+          for(var ki=3;ki<pp.length-2;ki++){var ax=pp[ki].x-pp[ki-1].x,ay=pp[ki].y-pp[ki-1].y,bx=pp[ki+1].x-pp[ki].x,by=pp[ki+1].y-pp[ki].y;
+          var la=Math.sqrt(ax*ax+ay*ay),lb=Math.sqrt(bx*bx+by*by);if(la<2||lb<2)continue;
+          var cs=(ax*bx+ay*by)/(la*lb);if(cs>1)cs=1;if(cs<-1)cs=-1;var ka=Math.acos(cs);
+          if(ka>maxK)maxK=ka;if(ka>0.55){kinkN++;if(kinkN<=8)slog('[LK] n='+s.name+' ki='+ki+' len='+pp.length+' ka='+ka.toFixed(2)+' predN='+(s.predN||0)+' A='+pp[ki-1].x.toFixed(1)+','+pp[ki-1].y.toFixed(1)+' B='+pp[ki].x.toFixed(1)+','+pp[ki].y.toFixed(1)+' C='+pp[ki+1].x.toFixed(1)+','+pp[ki+1].y.toFixed(1)+' tr='+s.trail.slice(0,8).map(function(q7){return Math.round(q7.x)+','+Math.round(q7.y);}).join(' '));}}}
+        var aw3=frames[0].contentWindow;
+        var L3=bw2.__G.LAN;
+        slog('[SOAKLAN] stage3000 jerk='+(L3.__jerkN||0)+'/'+(L3.__tickC||1)+' corr='+(L3.corrN||0)+' tp='+(L3.teleports||0));
+        slog('[SOAKLAN] final snaps='+L2.snapRecv+' rebases='+L2.rebases+' gaps='+(L2.gaps||0)+' teleports='+(L2.teleports||0)+' dead='+(L2.dead?1:0)+' entered='+(L2.entered?1:0)+' kinkN='+kinkN+' maxK='+maxK.toFixed(2)+' hostRemoteN='+Object.keys(aw3.__G.remotes).length+' bAlive='+(bw2.__G.player.alive?1:0));
+      }catch(e){slog('[SIM] final err '+e.message);}
+    }
+  }catch(e){slog('[SIM] step err '+e.message);}
+  if(t<745)setTimeout(step,200);
+}
+setTimeout(step,500);
+</script></body></html>

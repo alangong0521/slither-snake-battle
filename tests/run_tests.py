@@ -22,17 +22,27 @@ for c in ['chromium', 'chromium-browser', 'google-chrome', 'chrome']:
 if not CHROMIUM:
     print('FATAL: 未找到 chromium'); sys.exit(2)
 
-def run_chromium(url, budget, extra=None, window='1254,752', dom=False):
+def run_chromium(url, budget, extra=None, window='1254,752', dom=False, real_secs=130):
     args = [CHROMIUM, '--headless=new', '--disable-gpu', '--no-sandbox',
             '--allow-file-access-from-files', '--window-size=' + window,
-            '--virtual-time-budget=' + str(budget), '--enable-logging=stderr']
+            '--enable-logging=stderr']
+    if budget:
+        args.append('--virtual-time-budget=' + str(budget))
     if dom:
         args.append('--dump-dom')
     if extra:
         args += extra
     args.append(url)
-    p = subprocess.run(args, capture_output=True, text=True, timeout=300)
-    out = p.stderr + '\n' + p.stdout
+    if budget:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=600)
+        out = p.stderr + '\n' + p.stdout
+    else:
+        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            so, se = p.communicate(timeout=real_secs)
+        except subprocess.TimeoutExpired:
+            p.kill(); so, se = p.communicate()
+        out = (se or '') + '\n' + (so or '')
     logs = []
     for m in re.finditer(r'CONSOLE[^"]*"((?:[^"\\]|\\.)*)"', out):
         logs.append(m.group(1).replace('\\"', '"').replace('\\n', '\n'))
@@ -80,11 +90,44 @@ if(tickN===1520&&window.__MUSHTEST__){player.mushDrain=480;player.mushs=[{t:tick
 if(tickN===1540&&window.__MUSHTEST__){revive();player.grace=999999;}
 if(tickN>=1550&&tickN<=1560&&window.__MUSHTEST__){var fh=player.pts[0];if(fh)for(var fi=0;fi<6;fi++)spawnFood(fh.x+rnd(-14,14),fh.y+rnd(-14,14),2);}
 if(tickN===1740&&window.__MUSHTEST__){slog('[TEST] afterRevive alive='+(player.alive?1:0)+' score='+Math.round(player.score)+' drain='+(player.mushDrain||0));}
+if(tickN===100&&window.__AITEST__){slog('[TEST] logBtn='+(document.getElementById('logBtn')?1:0));}
+if(tickN===1525&&window.__MUSHTEST__){slog('[TEST] saveLogBtn='+(document.getElementById('saveLogBtn')?1:0)+' boostBtnGone='+(document.getElementById('boostBtn')?0:1));}
+// T49: AI 激进度——每120tick记录各AI蛇头, 算直线性(原地打转则位移/路程比极低); 统计AI成长
+if(tickN===300&&window.__AITEST__){window.__aiTrack={};for(var ai0=0;ai0<snakes.length;ai0++){var a0=snakes[ai0];if(!a0.isPlayer)window.__aiTrack[a0.uid]={path:0,disp:0,lx:a0.pts[0].x,ly:a0.pts[0].y,sx:a0.pts[0].x,sy:a0.pts[0].y};}}
+if(window.__AITEST__&&tickN>300&&tickN<=1800&&tickN%120===0){for(var uk in window.__aiTrack){var tr=window.__aiTrack[uk];var sn0=null;for(var ai1=0;ai1<snakes.length;ai1++)if(snakes[ai1].uid==uk)sn0=snakes[ai1];if(!sn0||!sn0.alive)continue;var hh0=sn0.pts[0];tr.path+=Math.sqrt((hh0.x-tr.lx)*(hh0.x-tr.lx)+(hh0.y-tr.ly)*(hh0.y-tr.ly));tr.lx=hh0.x;tr.ly=hh0.y;}}
+if(tickN===1800&&window.__AITEST__){var lin=[],grow=0,cnt=0;for(var uk2 in window.__aiTrack){var tr2=window.__aiTrack[uk2];var sn1=null;for(var ai2=0;ai2<snakes.length;ai2++)if(snakes[ai2].uid==uk2)sn1=snakes[ai2];if(!sn1)continue;cnt++;grow+=sn1.score;var dd0=Math.sqrt((tr2.lx-tr2.sx)*(tr2.lx-tr2.sx)+(tr2.ly-tr2.sy)*(tr2.ly-tr2.sy));if(tr2.path>100)lin.push(dd0/tr2.path);}
+var linAvg=lin.length?lin.reduce(function(a,b){return a+b;})/lin.length:0;
+var amax2=0;for(var ai3=0;ai3<snakes.length;ai3++)if(!snakes[ai3].isPlayer&&snakes[ai3].score>amax2)amax2=snakes[ai3].score;
+slog('[TEST] ai linAvg='+linAvg.toFixed(3)+' linN='+lin.length+' aiAvg='+(cnt?(grow/cnt).toFixed(0):0)+' aiMax='+Math.floor(amax2));}
+// T54: 计分审计——每个600tick窗口, 分数增量不得超过(吃豆+连杀+蘑菇)增量, 找出"凭空涨分"
+if(window.__SOAK__&&tickN%600===0){if(!window.__aud)window.__aud={ps:player.score,pe:player.__eat||0,pc:player.__chain||0,pm:player.__mush||0,bad:0,palive:1};
+var A=window.__aud;
+if(player.alive&&A.palive){var dsA=player.score-A.ps,srcA=(player.__eat||0)-A.pe+(player.__chain||0)-A.pc+(player.__mush||0)-A.pm;
+if(dsA>srcA+2){A.bad++;slog('[AUDIT] UNEXPLAINED t='+tickN+' ds='+dsA.toFixed(1)+' src='+srcA.toFixed(1));}}
+A.ps=player.score;A.pe=player.__eat||0;A.pc=player.__chain||0;A.pm=player.__mush||0;A.palive=player.alive;}
+if(window.__SOAK__&&tickN===39600){slog('[AUDIT] final bad='+(window.__aud?window.__aud.bad:-1)+' score='+Math.floor(player.score)+' eat='+Math.floor(player.__eat||0)+' chain='+(player.__chain||0)+' mush='+(player.__mush||0));}
+// T51: 10分钟耐久——持续扫描蛇身相邻节段夹角(锐角/重建毛刺=夹角突大), 统计AI成长与异常
+if(window.__SOAK__&&tickN>1200&&tickN%5===0&&player&&player.alive&&player.pts.length>24){
+if(!window.__kink)window.__kink={n:0,mx:0};
+var pp=player.pts;
+for(var ki=3;ki<pp.length-2;ki++){var ax=pp[ki].x-pp[ki-1].x,ay=pp[ki].y-pp[ki-1].y,bx=pp[ki+1].x-pp[ki].x,by=pp[ki+1].y-pp[ki].y;
+var la=Math.sqrt(ax*ax+ay*ay),lb=Math.sqrt(bx*bx+by*by);if(la<2||lb<2)continue;
+var cs=(ax*bx+ay*by)/(la*lb);if(cs>1)cs=1;if(cs<-1)cs=-1;var ka=Math.acos(cs);
+if(ka>window.__kink.mx)window.__kink.mx=ka;if(ka>0.55){window.__kink.n++;if(tickN>1000&&window.__kink.n<=20)slog('[KINK] t='+tickN+' ki='+ki+' len='+pp.length+' ka='+ka.toFixed(2)+' la='+la.toFixed(1)+' lb='+lb.toFixed(1)+' born='+(tickN-(player.bornT||0)));}
+}
+}
+if(window.__SOAK__&&tickN%3600===0){var am4=0;for(var ai4=0;ai4<snakes.length;ai4++)if(!snakes[ai4].isPlayer&&snakes[ai4].score>am4)am4=snakes[ai4].score;
+slog('[SOAK] t='+(tickN/60|0)+'s kinkN='+(window.__kink?window.__kink.n:0)+' maxK='+(window.__kink?window.__kink.mx.toFixed(2):0)+' score='+Math.floor(player.score)+' aiMax='+Math.floor(am4)+' deaths='+deaths+' foods='+foods.length);}
+if(window.__SOAK__&&tickN===39600){slog('[SOAK] final kinkN='+(window.__kink?window.__kink.n:0)+' maxK='+(window.__kink?window.__kink.mx.toFixed(2):0));}
+// T50: 加速豆——直行测基础速度→吃豆→测加速, 分数不得被加速消耗
+if(tickN===1780&&window.__BEANTEST__){player.grace=999999;player.aiT=99999;var bh=player.pts[0];player.angle=0;player.tAngle=0;player.aiA=0;player.boostT=0;window.__bx=bh.x;window.__by=bh.y;window.__bsc=player.score;}
+if(tickN===1810&&window.__BEANTEST__){var bh2=player.pts[0];window.__spd0=Math.sqrt((bh2.x-window.__bx)*(bh2.x-window.__bx)+(bh2.y-window.__by)*(bh2.y-window.__by))/30;foods.push({x:bh2.x+30,y:bh2.y,r:5,v:1,c:'#58a6ff',b:1});window.__bx=bh2.x;window.__by=bh2.y;}
+if(tickN===1845&&window.__BEANTEST__){var bh3=player.pts[0];window.__spd1=Math.sqrt((bh3.x-window.__bx)*(bh3.x-window.__bx)+(bh3.y-window.__by)*(bh3.y-window.__by))/35;slog('[TEST] bean spd0='+window.__spd0.toFixed(2)+' spd1='+window.__spd1.toFixed(2)+' ratio='+(window.__spd1/window.__spd0).toFixed(2)+' boostT='+((player.boostT||0)>tickN?1:0)+' scoreCost='+(window.__bsc-player.score).toFixed(1));}
 """
     g = src.replace('<body>', '<body><script>window.__AUTOPILOT__=true;window.__FORCE_FB__=true;'
         'window.__EATTEST__=true;window.__AURATEST__=true;window.__HEADTEST__=true;'
         'window.__POWTEST__=true;window.__BODYTEST__=true;window.__SKZOOM__=true;window.__MTTEST__=true;'
-        'window.__SPAWNTEST__=true;window.__CHAINTEST__=true;window.__MUSHTEST__=true;</script>', 1)
+        'window.__SPAWNTEST__=true;window.__CHAINTEST__=true;window.__MUSHTEST__=true;window.__AITEST__=true;window.__BEANTEST__=true;</script>', 1)
     g = g.replace('if(window.__EATTEST__){', probes + '\nif(window.__EATTEST__){', 1)
     open(os.path.join(WORK, 'g.html'), 'w', encoding='utf-8').write(g)
     # ---- 联机节点页 ----
@@ -98,10 +141,22 @@ if(tickN===1740&&window.__MUSHTEST__){slog('[TEST] afterRevive alive='+(player.a
         "get paused(){return paused},get DBG(){return DBG},die:function(s,k){die(s,k);},mkSnake:mkSnake,"
         "lanSend:function(o){lanSend(o);}};\n})();")
     open(os.path.join(WORK, 'lan_fb.html'), 'w', encoding='utf-8').write(fb)
+    # ---- 10分钟耐久页(锐角/异常扫描) ----
+    sk = src.replace('<body>', '<body><script>window.__AUTOPILOT__=true;window.__FORCE_FB__=true;window.__SOAK__=true;</script>', 1)
+    sk = sk.replace('if(window.__EATTEST__){', probes + '\nif(window.__EATTEST__){', 1)
+    open(os.path.join(WORK, 'soak.html'), 'w', encoding='utf-8').write(sk)
+    # ---- 真实帧耗页(大蛇高负载, 非虚拟时间) ----
+    pf = src.replace('<body>', '<body><script>window.__PERF__=true;window.__AUTOPILOT__=true;window.__BIGTEST__=true;window.__FORCE_FB__=true;</script>', 1)
+    pf = pf.replace('if(AUTO){', 'if(window.__BIGTEST__&&tickN===120){for(var bi9=0;bi9<snakes.length;bi9++){snakes[bi9].score=2600;snakes[bi9].vlen=2600;}}\nif(AUTO){', 1)
+    open(os.path.join(WORK, 'perf.html'), 'w', encoding='utf-8').write(pf)
     # ---- 三人联机仿真 ----
     sim = open(os.path.join(ROOT, 'tests/lan_sim3_tpl.html'), encoding='utf-8').read()
     sim = sim.replace('__FB_PATH__', os.path.join(WORK, 'lan_fb.html'))
     open(os.path.join(WORK, 'lan_sim3.html'), 'w', encoding='utf-8').write(sim)
+    # ---- 联机长程耐久(12分钟, 全程抖动) ----
+    lsk = open(os.path.join(ROOT, 'tests/lan_soak_tpl.html'), encoding='utf-8').read()
+    lsk = lsk.replace('__FB_PATH__', os.path.join(WORK, 'lan_fb.html'))
+    open(os.path.join(WORK, 'lan_soak.html'), 'w', encoding='utf-8').write(lsk)
 
 def solo_tests():
     logs, _ = run_chromium('file://' + os.path.join(WORK, 'g.html'), 31000)
@@ -141,6 +196,22 @@ def solo_tests():
           and d2 and d2.group(1) == '1' and int(d2.group(2)) > 26 and int(d2.group(3)) == 0,
           ' / '.join(x.group(0) if x else '无日志' for x in [d1, d2]))
 
+    m = re.search(r'ai linAvg=([\d.]+) linN=(\d+) aiAvg=(\d+) aiMax=(\d+)', joined)
+    check('T49', 'AI激进进食(不原地打转, 持续长大)',
+          m and float(m.group(1)) > 0.24 and int(m.group(4)) >= 130 and int(m.group(3)) >= 55,
+          m.group(0) if m else '无日志')
+    m = re.search(r'bean spd0=([\d.]+) spd1=([\d.]+) ratio=([\d.]+) boostT=(\d) scoreCost=(-?[\d.]+)', joined)
+    check('T50', '加速豆: 吃豆加速且不耗分数',
+          m and float(m.group(3)) > 1.35 and m.group(4) == '1' and float(m.group(5)) < 1.0,
+          m.group(0) if m else '无日志')
+    m = re.search(r'saveLogBtn=(\d) boostBtnGone=(\d)', joined)
+    check('T50b', '阵亡弹窗有保存日志按钮/加速按钮已移除',
+          m and m.group(1) == '1' and m.group(2) == '1',
+          m.group(0) if m else '无日志')
+    m = re.search(r'logBtn=(\d)', joined)
+    check('T55', '日志按钮在声音开关旁', m and m.group(1) == '1', m.group(0) if m else '无日志')
+
+
 def view_tests():
     vals = []
     for w in ['1254,752', '1188,540']:
@@ -167,6 +238,40 @@ def version_test():
     check('T20', '版本号与build.gradle一致',
           m and ver_src and ver_gradle and m.group(1) == '版本 v' + ver_src.group(1) == '版本 v' + ver_gradle.group(1),
           '页面=%s js=%s gradle=%s' % (m.group(1) if m else '?', ver_src.group(1) if ver_src else '?', ver_gradle.group(1) if ver_gradle else '?'))
+def lan_soak_tests():
+    logs, _ = run_chromium('file://' + os.path.join(WORK, 'lan_soak.html'), 790000, window='900,560')
+    joined = '\n'.join(logs)
+    errs = [l for l in logs if l.startswith('[ERR]')]
+    mJ1 = re.search(r'\[SOAKLAN\] stage1000 jerk=(\d+)/(\d+)', joined)
+    mJ3 = re.search(r'\[SOAKLAN\] stage3000 jerk=(\d+)/(\d+)', joined)
+    check('T57', '从机蛇头跳动率(1000+/3000+档均<2%)',
+          mJ1 and mJ3 and int(mJ1.group(1)) < int(mJ1.group(2))*0.02 and int(mJ3.group(1)) < int(mJ3.group(2))*0.02,
+          ((mJ1.group(0) if mJ1 else '无1000档') + ' | ' + (mJ3.group(0) if mJ3 else '无3000档')))
+    m = re.search(r'\[SOAKLAN\] final snaps=(\d+) rebases=(\d+) gaps=(\d+) teleports=(\d+) dead=(\d) entered=(\d) kinkN=(\d+) maxK=([\d.]+) hostRemoteN=(\d+)', joined)
+    check('T53', '联机12分钟长程(抖动): 不掉线/无瞬移/无锐角',
+          m and len(errs) == 0 and m.group(5) == '0' and m.group(6) == '1'
+          and int(m.group(4)) <= 6 and int(m.group(7)) <= 8 and float(m.group(8)) < 0.9 and int(m.group(9)) >= 1,
+          (m.group(0) if m else '无日志(未跑满)') + (' ERR:' + ';'.join(errs[:2]) if errs else ''))
+
+def soak_tests():
+    logs, _ = run_chromium('file://' + os.path.join(WORK, 'soak.html'), 670000)
+    joined = '\n'.join(logs)
+    errs = [l for l in logs if l.startswith('[ERR]')]
+    m = re.search(r'\[SOAK\] final kinkN=(\d+) maxK=([\d.]+)', joined)
+    m2 = re.search(r'\[AUDIT\] final bad=(\d+)', joined)
+    check('T54', '计分审计: 10分钟内无凭空涨分', m2 and m2.group(1) == '0',
+          m2.group(0) if m2 else '无审计日志')
+    check('T51', '10分钟耐久: 无异常/蛇身无锐角毛刺',
+          m and len(errs) == 0 and int(m.group(1)) <= 6 and float(m.group(2)) < 0.9,
+          (m.group(0) if m else '无日志(未满10分钟)') + (' ERR:' + ';'.join(errs[:2]) if errs else ''))
+
+def perf_tests():
+    logs, _ = run_chromium('file://' + os.path.join(WORK, 'perf.html'), 0, real_secs=130)
+    pl = [l for l in logs if '[PERF] tick' in l]
+    m = re.search(r'tick avg=([\d.]+)ms render avg=([\d.]+)ms', pl[-1]) if pl else None
+    check('T52', '真实帧耗(5蛇x2600分): tick<6ms render<8ms',
+          m and float(m.group(1)) < 6 and float(m.group(2)) < 8,
+          pl[-1] if pl else '无PERF日志')
 
 def lan_tests():
     logs, _ = run_chromium('file://' + os.path.join(WORK, 'lan_sim3.html'), 37000, window='1300,700')
@@ -174,7 +279,7 @@ def lan_tests():
     check('T21', '主机建房+两客机加入(remotes=2)', 'remotes=2' in joined)
     check('T22', '第三玩家真正入局(ownIdx=11)', 'C ownIdx=11' in joined)
     check('T23', '从机免确认自动进入', joined.count('autoEntered=true') >= 2)
-    check('T24', '快照60Hz持续下发', bool(re.search(r'B snaps=([4-9]\d|\d{3,})', joined)))
+    check('T24', '快照30Hz持续下发', bool(re.search(r'B snaps=([4-9]\d|\d{3,})', joined)))
     for f in ['A', 'B', 'C']:
         m = re.search(f + r' humans:(.*)', joined)
         ok = m and all((n + ':') in m.group(1) for n in ['主机', '客机B', '客机C']) and 'pt@-999' not in m.group(1)
@@ -231,6 +336,9 @@ def main():
     print('== 视野公平测试 =='); view_tests()
     print('== 版本号测试 =='); version_test()
     print('== 三人联机仿真 =='); lan_tests()
+    print('== 10分钟耐久 =='); soak_tests()
+    print('== 真实帧耗 =='); perf_tests()
+    print('== 联机12分钟长程 =='); lan_soak_tests()
     fails = [r for r in results if not r[2]]
     print('\n===== 结果: %d 项通过, %d 项失败 =====' % (len(results) - len(fails), len(fails)))
     if fails:

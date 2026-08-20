@@ -110,6 +110,24 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String saveLog(final String text) {
+            try {
+                java.io.File dir = getExternalFilesDir(null);
+                if (dir == null) dir = getFilesDir();
+                String name = "snake_log_" + new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(new java.util.Date()) + ".txt";
+                java.io.File f = new java.io.File(dir, name);
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(f);
+                fos.write(text.getBytes("UTF-8"));
+                fos.close();
+                final String path = f.getAbsolutePath();
+                ui.post(() -> android.widget.Toast.makeText(MainActivity.this, "日志已保存: " + path, android.widget.Toast.LENGTH_LONG).show());
+                return path;
+            } catch (Exception e) {
+                return "保存失败: " + e.getMessage();
+            }
+        }
+
+        @JavascriptInterface
         public void lanHost(final int port) {
             lanStop();
             running = true;

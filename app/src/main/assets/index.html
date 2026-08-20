@@ -17,9 +17,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e1013;font-family:
 #joy{position:fixed;left:calc(20px + env(safe-area-inset-left));bottom:calc(20px + env(safe-area-inset-bottom));width:116px;height:116px;border-radius:50%;border:1.5px solid #3a4048;background:rgba(255,255,255,0.05);z-index:6;touch-action:none}
 #map{position:fixed;left:calc(20px + env(safe-area-inset-left));bottom:calc(146px + env(safe-area-inset-bottom));width:100px;height:100px;border-radius:50%;border:1px solid #2a2f37;background:rgba(20,22,27,0.55);z-index:5;pointer-events:none}
 #joyKnob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.3)}
-#boostBtn{position:fixed;right:calc(20px + env(safe-area-inset-right));bottom:calc(24px + env(safe-area-inset-bottom));width:76px;height:76px;border-radius:50%;border:1.5px solid #3a4048;background:rgba(255,255,255,0.07);color:#f2f3f5;font-size:14px;font-family:inherit;z-index:6;touch-action:none}
 #skillBtn{position:fixed;right:calc(110px + env(safe-area-inset-right));bottom:calc(36px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;border:1.5px solid #e3b341;background:rgba(227,179,65,0.15);color:#ffe08a;font-size:12px;font-family:inherit;z-index:6;touch-action:none}
-#boostBtn.on{background:rgba(88,166,255,0.28);border-color:#58a6ff}
 .ovl{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;background:rgba(10,11,14,0.82);z-index:10;text-align:center;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .ovl>*{flex-shrink:0}
 .ovl>*:first-child{margin-top:auto}
@@ -37,6 +35,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e1013;font-family:
 #famRow .fw span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:11px;color:#0e1013;font-weight:600;pointer-events:none}
 .tbtn{position:fixed;top:calc(8px + env(safe-area-inset-top));z-index:6;padding:6px 12px;font-size:13px;border-radius:8px;border:1px solid #333842;background:rgba(20,22,27,0.7);color:#f2f3f5;font-family:inherit}
 #musBtn{right:158px}
+#logBtn{right:230px}
 #sfxBtn{right:86px}
 #exitBtn{right:230px}
 .btn2{background:transparent;color:#f2f3f5}
@@ -59,13 +58,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e1013;font-family:
 </div>
 <button class="tbtn" id="musBtn">音乐·开</button>
 <button class="tbtn" id="sfxBtn">音效·开</button>
+<button class="tbtn" id="logBtn">日志</button>
 <button class="tbtn" id="exitBtn">退出</button>
 <button id="pauseBtn">暂停</button>
 <div class="lb" id="lb"></div>
 <canvas id="map" width="240" height="240"></canvas>
 <button id="skillBtn" style="display:none">技能</button>
 <div id="joy"><div id="joyKnob"></div></div>
-<button id="boostBtn">加速</button>
 <div class="ovl" id="ovl">
 <h3>贪吃蛇大作战</h3>
 <input id="nameInput" maxlength="8" placeholder="输入你的名字" autocomplete="off">
@@ -91,23 +90,24 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.8';
+var VERSION='3.9';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
 var W=0,H=0,DPR=1;
 var needRender=true,cvRect=null,joyRect=null;
-function resize(){DPR=Math.min(1.5,window.devicePixelRatio||1);W=window.innerWidth;H=window.innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);needRender=true;cvRect=null;joyRect=null;}
+var QDPR=0;
+function resize(){DPR=QDPR>0?QDPR:Math.min(1.5,window.devicePixelRatio||1);W=window.innerWidth;H=window.innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);needRender=true;cvRect=null;joyRect=null;}
 window.addEventListener('resize',resize);
 function rnd(a,b){return a+Math.random()*(b-a);}
-function dist(x1,y1,x2,y2){return Math.hypot(x2-x1,y2-y1);}
+function dist(x1,y1,x2,y2){var ddx=x2-x1,ddy=y2-y1;return Math.sqrt(ddx*ddx+ddy*ddy);}
 var foods=[],snakes=[],player=null,tickN=0,paused=false,started=false,deaths=0,aliveTicks=0;
 var powers=[],PWT=['mag','zm','x5','mush'];
 var PWC={mag:'#ffd700',shd:'#58a6ff',zm:'#d2a8ff',x5:'#3fb950',mush:'#ff9ecf'};
 var PWN={mag:'磁',shd:'盾',zm:'镜',x5:'×2',mush:'菇'};
 function spawnPower(){var p=randPos(200);powers.push({x:p.x,y:p.y,r:10,type:PWT[(Math.random()*PWT.length)|0]});}
 function applyPower(s,t){
-if(t==='mush'){s.score+=500;(s.mushs=s.mushs||[]).push({t:tickN+900,v:500});}
+if(t==='mush'){s.score+=500;s.__mush=(s.__mush||0)+500;(s.mushs=s.mushs||[]).push({t:tickN+900,v:500});}
 else if(t==='mag')s.magT=tickN+600;
 else if(t==='shd')s.shdT=tickN+480;
 else if(t==='zm')s.zmT=tickN+600;
@@ -120,16 +120,17 @@ s.skillN--;s.fzT=tickN+480;s.zmT=Math.max(s.zmT||0,tickN+600);
 if(s.isPlayer)sfxFrenzy();
 return true;
 }
-var boostIds={},mouseBoost=false;
 function randPos(margin){var a=rnd(0,Math.PI*2),r=rnd(0,WORLD_R-margin);return{x:Math.cos(a)*r,y:Math.sin(a)*r};}
 function spawnFood(x,y,val){if(foods.length>=900)return;var p=(x===undefined)?randPos(120):{x:x,y:y};foods.push({x:p.x,y:p.y,r:rnd(2.5,4.5),v:val||1,c:SERIES[(Math.random()*SERIES.length)|0]});}
+var BOOST_N=6;
+function spawnBoostBean(){if(foods.length>=900)return;var p=randPos(150);foods.push({x:p.x,y:p.y,r:5,v:1,c:'#58a6ff',b:1});}
 function clearOf(x,y,d){for(var k=0;k<snakes.length;k++){var s=snakes[k];if(!s.alive)continue;for(var i=0;i<s.pts.length;i+=4){if(dist(x,y,s.pts[i].x,s.pts[i].y)<d)return false;}}return true;}
 function rad(s){return 4.5+Math.min(9,s.score*0.045);}
 function zoomOf(s){var z=Math.max(0.65,1-Math.max(0,s.score-26)*0.0012);if((s.zmT||0)>tickN)z*=0.8;return z;}
 var NAMES=['蛇王','大胃王','闪电','卷卷','小皮','奶糖','墨墨','豆豆','阿紫'];
 var UID=1;
 function mkSnake(name,color,isPlayer){
-var s={name:name,color:color,isPlayer:!!isPlayer,pts:[],trail:[],aggro:rnd(0.2,0.6),vlen:26,angle:rnd(0,Math.PI*2),tAngle:0,score:26,kills:0,alive:true,boost:false,grace:150,aiT:0,aiA:rnd(0,Math.PI*2),respawn:0,deadT:0,tseq:0,snapFull:true,uid:UID++};
+var s={name:name,color:color,isPlayer:!!isPlayer,pts:[],trail:[],aggro:rnd(0.5,0.95),vlen:26,angle:rnd(0,Math.PI*2),tAngle:0,score:26,kills:0,alive:true,boost:false,grace:150,aiT:0,aiA:rnd(0,Math.PI*2),respawn:0,deadT:0,tseq:0,snapFull:true,uid:UID++};
 place(s);return s;
 }
 function farFromHumans(x,y,d){
@@ -308,14 +309,15 @@ for(var i=0;i<snakes.length;i++){var s=snakes[i];
 var lw=ss[s.uid],tr=[],full=0;
 if(s.snapFull||lw===undefined||lw>s.tseq||s.tseq-lw>s.trail.length){
 full=1;
-var need=Math.min(s.trail.length,Math.ceil(s.vlen*0.9)+30);
-for(var j=0;j<need;j+=2){tr.push(Math.round(s.trail[j].x));tr.push(Math.round(s.trail[j].y));}
+// 全量轨迹: 长度必须覆盖 身长xSP 弧长(vlen*0.9个点只够一半弧长, 曾导致客机尾部堆积→反复请求全量→重建风暴)
+var need=Math.min(s.trail.length,Math.ceil(s.vlen*SP/2.5)+40);
+for(var j=0;j<need;j++){tr.push(Math.round(s.trail[j].x));tr.push(Math.round(s.trail[j].y));}
 }else{
 var cnt=Math.min(s.tseq-lw,s.trail.length);
 for(var j2=0;j2<cnt;j2++){tr.push(Math.round(s.trail[j2].x));tr.push(Math.round(s.trail[j2].y));}
 }
 ss[s.uid]=s.tseq;
-sn.push({i:i,u:s.uid,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(s.boost&&s.score>28)?1:0,f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0]});
+sn.push({i:i,u:s.uid,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1:0),f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0,Math.max(0,(s.boostT||0)-tickN)]});
 }
 var fd=null;
 var rp=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
@@ -324,7 +326,7 @@ fd=[];
 var cand=[];
 for(var i2=0;i2<foods.length;i2++){var f=foods[i2];var dx=f.x-rp.x,dy=f.y-rp.y,dd=dx*dx+dy*dy;if(dd<1600*1600)cand.push([dd,f]);}
 cand.sort(function(a,b){return a[0]-b[0];});
-for(var i3=0;i3<cand.length&&fd.length<140;i3++){var f2=cand[i3][1];fd.push([Math.round(f2.x),Math.round(f2.y),+f2.r.toFixed(1),SERIES.indexOf(f2.c)]);}
+for(var i3=0;i3<cand.length&&fd.length<140;i3++){var f2=cand[i3][1];fd.push([Math.round(f2.x),Math.round(f2.y),+f2.r.toFixed(1),SERIES.indexOf(f2.c),f2.b?1:0]);}
 }
 var pw=null;
 if(withFd){pw=[];for(var pi3=0;pi3<powers.length;pi3++){var p3=powers[pi3];pw.push([Math.round(p3.x),Math.round(p3.y),PWT.indexOf(p3.type)]);}}
@@ -358,7 +360,7 @@ var isOwn=(LAN.ownUid!==undefined&&ms.u===LAN.ownUid)||(LAN.ownUid===undefined&&
 if(isOwn)LAN.ownIdx=i;
 var prevScore=ls.score;
 ls.name=ms.n;ls.color=ms.c;ls.kills=ms.k;ls.score=ms.s;ls.isHuman=!!ms.h;ls.boost=!!ms.b;
-if(ms.e){ls.magT=tickN+ms.e[0];ls.shdT=tickN+ms.e[1];ls.zmT=tickN+ms.e[2];ls.x5T=tickN+ms.e[3];ls.fzT=tickN+ms.e[4];ls.skillN=ms.e[5];}
+if(ms.e){ls.magT=tickN+ms.e[0];ls.shdT=tickN+ms.e[1];ls.zmT=tickN+ms.e[2];ls.x5T=tickN+ms.e[3];ls.fzT=tickN+ms.e[4];ls.skillN=ms.e[5];if(ms.e.length>6)ls.boostT=tickN+ms.e[6];}
 var wasAlive=ls.alive;
 ls.alive=!!ms.a;
 ls.authH=ms.hh;
@@ -379,11 +381,20 @@ var pn=ls.predN||0;while(pn-->0&&ls.trail.length>1)ls.trail.shift();
 var nNew=0;
 if(ms.tr){nNew=ms.tr.length/2;for(var q=ms.tr.length-2;q>=0;q-=2)ls.trail.unshift({x:ms.tr[q],y:ms.tr[q+1]});}
 // 缝合处平滑: 丢包留下的轨迹洞会让新旧轨迹错位出折角(幽灵轨迹), 对缝合作拉普拉斯平滑
-if(nNew>0&&ls.trail.length>nNew+1){var sm0=Math.max(1,nNew-2),sm1=Math.min(ls.trail.length-2,nNew+5);
+if(nNew>0&&ls.trail.length>nNew+1){var sm0=Math.max(1,nNew-4),sm1=Math.min(ls.trail.length-2,nNew+9);
 for(var si2=sm0;si2<=sm1;si2++){var p0=ls.trail[si2-1],p1=ls.trail[si2],p2=ls.trail[si2+1];p1.x=(p0.x+p2.x)*0.25+p1.x*0.5;p1.y=(p0.y+p2.y)*0.25+p1.y*0.5;}}
+// 接缝渐变摊销: 权威轨迹与本地预测旧轨迹的错位, 沿12点窗口渐变吸收(消除缝合处折叠锐角/蛇头突变)
+if(nNew>0&&ls.trail.length>nNew+2){
+var aN=ls.trail[nNew-1],o0=ls.trail[nNew];
+var ox=aN.x-o0.x,oy=aN.y-o0.y;var om2=Math.sqrt(ox*ox+oy*oy);
+if(om2>2){for(var wi=0;wi<24&&nNew+wi<ls.trail.length;wi++){var wgt=1-wi/24;var ptW=ls.trail[nNew+wi];ptW.x+=ox*wgt;ptW.y+=oy*wgt;}
+for(var ps2=0;ps2<2;ps2++){var smA=Math.max(1,nNew-2),smB=Math.min(ls.trail.length-2,nNew+12);
+for(var si3=smA;si3<=smB;si3++){var q0=ls.trail[si3-1],q1=ls.trail[si3],q2=ls.trail[si3+1];q1.x=(q0.x+q2.x)*0.25+q1.x*0.5;q1.y=(q0.y+q2.y)*0.25+q1.y*0.5;}}}
+}
 ls.predN=0;
-if(ms.hh&&ls.trail.length){var t0=ls.trail[0];t0.x+=(ms.hh[0]-t0.x)*0.35;t0.y+=(ms.hh[1]-t0.y)*0.35;
-if(ls.pts.length){var hp=ls.pts[0];hp.x+=(t0.x-hp.x)*0.35;hp.y+=(t0.y-hp.y)*0.35;}}
+// 头部直接对齐权威坐标: 增量是绝对坐标, 35%插值会让轨迹头落后, 同批下一条快照的增量拼上时形成折角
+if(ms.hh&&ls.trail.length){var t0=ls.trail[0];t0.x=ms.hh[0];t0.y=ms.hh[1];
+if(ls.pts.length){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];}}
 // 角度不平滑修正: 只更新目标角, 由每帧0.13的匀速转向自然逼近(消除锐角)
 ls.angle+=norm(ms.g-ls.angle)*0.15;ls.tAngle=ms.g;
 }
@@ -391,14 +402,17 @@ if(isOwn){
 ls.isPlayer=true;ownS=ls;
 // 与3帧前的本地历史位置比对得出真实误差; 小误差不纠正(死区, 消除持续拖拽感), 中误差渐进修正, 大误差才瞬移
 if(ms.hh&&ls.pts.length&&!ms.f){
-var ref=ownHist[((tickN-3)%90+90)%90];
-var bx2=(ref&&ref.t===tickN-3)?ref.x:ls.pts[0].x,by2=(ref&&ref.t===tickN-3)?ref.y:ls.pts[0].y;
+// 时延自适应: 在近12帧本地历史里找与权威头最接近的一帧; 误差=真实发散度, 网络时延不再被误算成误差
+var best9=1e18,bx2=ls.pts[0].x,by2=ls.pts[0].y;
+for(var k9=0;k9<=12;k9++){var rf=ownHist[((tickN-k9)%90+90)%90];if(!rf||rf.t!==tickN-k9)continue;
+var d9x=ms.hh[0]-rf.x,d9y=ms.hh[1]-rf.y,dd9=d9x*d9x+d9y*d9y;if(dd9<best9){best9=dd9;bx2=rf.x;by2=rf.y;}}
 var ox2=ms.hh[0]-bx2,oy2=ms.hh[1]-by2;
-var om=Math.hypot(ox2,oy2);
-if(om>120){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;LAN.teleports++;dbg('自身蛇瞬移 om='+Math.round(om));}
-else if(om>=20){ls.corrX=ox2;ls.corrY=oy2;LAN.corrN=(LAN.corrN||0)+1;}
+var om=Math.sqrt(best9<1e17?best9:0);
+if(om>160){ls.pts[0].x=ms.hh[0];ls.pts[0].y=ms.hh[1];ls.corrX=ls.corrY=0;LAN.teleports++;dbg('自身蛇瞬移 om='+Math.round(om));}
+else if(om>=45){ls.corrX=ox2;ls.corrY=oy2;LAN.corrN=(LAN.corrN||0)+1;}
 else LAN.corrSkip=(LAN.corrSkip||0)+1;
 }
+if(!ms.f&&ms.s>prevScore+0.5&&tickN-(LAN.__eatSfx||-99)>8){LAN.__eatSfx=tickN;combo++;comboT=tickN;sfxEat(combo);}
 if(wasAlive&&!ls.alive){deaths++;sfxDie();dbg('阵亡(主机快照) score='+ms.s);showDeath();}
 if(!wasAlive&&ls.alive){dbg('重生生效 score='+ms.s+' f='+ms.f);var ov=$('ovl');if(ov.style.display!=='none'&&$('reviveBtn'))ov.style.display='none';}
 }
@@ -412,7 +426,7 @@ var f=m.fd[j],fx=f[0],fy=f[1];
 var best=null,bd=40*40;
 for(var j4=0;j4<foods.length;j4++){var o=foods[j4];if(!o.miss)continue;var dx=o.x-fx,dy=o.y-fy,dd=dx*dx+dy*dy;if(dd<bd){bd=dd;best=o;}}
 if(best){best.miss=0;best.tx=fx;best.ty=fy;}
-else foods.push({x:fx,y:fy,tx:fx,ty:fy,r:f[2]||3,c:SERIES[f[3]>=0?f[3]:0],v:1,miss:0});
+else foods.push({x:fx,y:fy,tx:fx,ty:fy,r:f[2]||3,c:SERIES[f[3]>=0?f[3]:0],v:1,miss:0,b:f[4]?1:0});
 }
 for(var j5=foods.length-1;j5>=0;j5--)if(foods[j5].miss>1)foods.splice(j5,1);
 if(m.pw){powers.length=0;for(var j2=0;j2<m.pw.length;j2++){var q2=m.pw[j2];powers.push({x:q2[0],y:q2[1],r:10,type:PWT[q2[2]>=0?q2[2]:0]});}}
@@ -423,7 +437,6 @@ if(ownS)player=ownS;
 function clientTick(){
 // 常驻心跳1Hz: 死亡观战/长暂停期间也保持上行, 防主机僵尸清理误踢(Java层另有5秒读超时)
 if(tickN%60===0){lanSend({t:'hb'});if(!LAN.__hbLogged){LAN.__hbLogged=1;dbg('客户端心跳启动 tickN='+tickN);}}
-player.boost=(Object.keys(boostIds).length>0)||mouseBoost;
 if(tickN-comboT>90)combo=0;
 if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;
 // 死亡后本地不再模拟移动(定格), 等主机快照/重生
@@ -437,7 +450,7 @@ for(var k=0;k<snakes.length;k++){var s=snakes[k];if(s===player||!s.alive||!s.pts
 var turn=0.13;
 s.angle+=Math.max(-turn,Math.min(turn,norm(s.tAngle-s.angle)));
 var zm=zoomOf(s);
-var sp=(3.0/zm)*(1+(1-zm)*0.4)*((s.boost&&s.score>28)?1.8:1);
+var sp=(3.0/zm)*(1+(1-zm)*0.4)*(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1.8:1);
 if((s.fzT||0)>tickN)sp*=1.25;
 var h=s.pts[0];
 h.x+=Math.cos(s.angle)*sp;h.y+=Math.sin(s.angle)*sp;
@@ -448,7 +461,7 @@ s.predN=(s.predN||0)+1;
 
 rebuildBody(s);
 // 本地轨迹弧长不足以覆盖身体(大分跳变) → 请求主机全量重同步
-if((s.__pile||0)>8&&tickN-(s.__rsT||-9999)>60){s.__rsT=tickN;dbg('轨迹不足, 请求单蛇重同步 uid='+s.uid);lanSend({t:'rs',u:s.uid});}
+if((s.__pile||0)>20&&tickN-(s.__rsT||-9999)>120){s.__rsT=tickN;dbg('轨迹不足, 请求单蛇重同步 uid='+s.uid);lanSend({t:'rs',u:s.uid});}
 }
 for(var tf=0;tf<foods.length;tf++){var fo=foods[tf];if(fo.tx!==undefined){fo.x+=(fo.tx-fo.x)*0.35;fo.y+=(fo.ty-fo.y)*0.35;}}
 if(LAN.snapRecv===0&&tickN%90===0)lanSend({t:'hello',n:player.name,c:player.color});
@@ -459,10 +472,24 @@ if(tickN%2===0)lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
 if(player.alive)aliveTicks++;
+if(window.__LANTEST__&&player.alive){var hh8=player.pts[0];if(LAN.__ph){var d8=dist(hh8.x,hh8.y,LAN.__ph.x,LAN.__ph.y);LAN.__jerkN=(LAN.__jerkN||0)+(d8>7.5?1:0);LAN.__tickC=(LAN.__tickC||0)+1;}LAN.__ph={x:hh8.x,y:hh8.y};}
 if(window.__LANTEST__&&tickN%60===0)slog('[LAN] recv='+LAN.snapRecv+' myScore='+Math.floor(player.score)+' snakes='+snakes.length+' ownIdx='+LAN.ownIdx+' sync='+(player===LAN.cSnakes[LAN.ownIdx]?1:0)+' hostScore='+(LAN.cSnakes[LAN.ownIdx]?Math.floor(LAN.cSnakes[LAN.ownIdx].score):-1)+' playerName='+player.name);
 }
 function aiThink(s){
 var h=s.pts[0],r=rad(s);
+if((s.__brk||0)>tickN){
+// 出击模式: 锁定最近高分豆或最小蛇头, 直线扑过去
+var bt=null,bd2=1e18;
+for(var bi5=0;bi5<snakes.length;bi5++){var o5=snakes[bi5];if(o5===s||!o5.alive)continue;
+var oh5=o5.pts[0];var dd5=(oh5.x-h.x)*(oh5.x-h.x)+(oh5.y-h.y)*(oh5.y-h.y);
+var sc5=dd5/Math.max(30,o5.score);if(sc5<bd2){bd2=sc5;bt=oh5;}}
+for(var fi5=0;fi5<foods.length;fi5++){var f5=foods[fi5];var df5=(f5.x-h.x)*(f5.x-h.x)+(f5.y-h.y)*(f5.y-h.y);
+var vf5=df5/((f5.b?3:(f5.v||1))*60);if(vf5<bd2){bd2=vf5;bt=f5;}}
+if(bt){s.aiA=Math.atan2(bt.y-h.y,bt.x-h.x);
+var dcB=Math.sqrt(h.x*h.x+h.y*h.y);if(dcB>WORLD_R-260)s.aiA=Math.atan2(-h.y,-h.x);
+if(bd2>300*300&&s.score>60)s.boost=true;else s.boost=false;
+return;}
+}
 var threat=[];
 for(var k=0;k<snakes.length;k++){
 var o=snakes[k];if(!o.alive)continue;
@@ -485,14 +512,17 @@ if(o2.score<s.score*0.7&&d2<nsd){nsd=d2;ns=o2;}
 if(nb){want=Math.atan2(h.y-nb.y,h.x-nb.x);}
 else if(ns&&Math.random()<(s.aggro||0.35)){
 var nsh=ns.pts[0];
-var lead=Math.min(40,Math.hypot(nsh.x-h.x,nsh.y-h.y)*0.5);
+var lead=Math.min(40,Math.sqrt((nsh.x-h.x)*(nsh.x-h.x)+(nsh.y-h.y)*(nsh.y-h.y))*0.5);
 want=Math.atan2(nsh.y+Math.sin(ns.angle)*lead-h.y,nsh.x+Math.cos(ns.angle)*lead-h.x);
 }else{
-var bf=null,bd=900*900;
-for(var i=0;i<foods.length;i++){var f=foods[i];var dx=f.x-h.x,dy=f.y-h.y,dd=dx*dx+dy*dy;if(dd<bd){bd=dd;bf=f;}}
+var bf=null,bd=-1;
+for(var i=0;i<foods.length;i++){var f=foods[i];var dx=f.x-h.x,dy=f.y-h.y,dd=dx*dx+dy*dy;if(dd>1600*1600)continue;
+var val=(f.b?3:(f.v||1))*200000/(40000+dd);if(val>bd){bd=val;bf=f;}}
 if(bf)want=Math.atan2(bf.y-h.y,bf.x-h.x);
+else want=Math.atan2(-h.y,-h.x)+Math.sin(tickN*0.013+s.uid)*0.7;
+s.__tgt=bf;
 }
-var dc=Math.hypot(h.x,h.y);
+var dc=Math.sqrt(h.x*h.x+h.y*h.y);
 if(dc>WORLD_R-320)want=Math.atan2(-h.y,-h.x)+rnd(-0.3,0.3);
 var best=want,bestScore=-1e9;
 for(var c=-4;c<=4;c++){
@@ -500,7 +530,7 @@ var ang=want+c*0.35;
 var look=130+r*3;
 var px2=h.x+Math.cos(ang)*look,py2=h.y+Math.sin(ang)*look;
 var danger=0;
-var dEdge=Math.hypot(px2,py2);
+var dEdge=Math.sqrt(px2*px2+py2*py2);
 if(dEdge>WORLD_R-140)danger+=(dEdge-(WORLD_R-140))*3;
 for(var t=0;t<threat.length;t++){
 var tp=threat[t];
@@ -508,18 +538,26 @@ var dd2=dist(px2,py2,tp.x,tp.y),lim=45+r+tp.r;
 if(dd2<lim)danger+=(lim-dd2)*4;
 }
 var align=Math.cos(norm(ang-want))*40;
-var persist=Math.cos(norm(ang-s.angle))*30;
+var persist=Math.cos(norm(ang-s.angle))*14;
 var sc=align+persist-danger;
 if(Math.abs(norm(ang-s.angle))>2.0)sc-=250;
 if(sc>bestScore){bestScore=sc;best=ang;}
 }
 s.aiA=best;
-s.boost=(bestScore>-25&&Math.random()<0.015)||(nb&&nbd<130*130);
+s.boost=(nb&&nbd<130*130)||(bestScore>-25&&s.__tgt&&bd>0&&Math.random()<0.10&&(s.boostT||0)<=tickN)||(bestScore>-25&&Math.random()<0.02);
 if((s.skillN||0)>0&&(nb||ns)&&Math.random()<0.25)activateSkill(s);
 }
 function steerAI(s){
 s.aiT--;
-if(s.aiT<=0){s.aiT=8;aiThink(s);}
+// 转圈检测: 240tick位移<150px≈原地画圈。若没有被围猎(附近有大蛇逼近)则强制出击锁目标
+if(!s.__cirT||tickN-s.__cirT>=240){var h0=s.pts[0];
+if(s.__cirT){var cd=Math.sqrt((h0.x-s.__cx)*(h0.x-s.__cx)+(h0.y-s.__cy)*(h0.y-s.__cy));
+if(cd<150){var hunted=false;
+for(var ci8=0;ci8<snakes.length;ci8++){var o8=snakes[ci8];if(o8===s||!o8.alive)continue;
+if(o8.score>s.score*1.3){var od=dist(h0.x,h0.y,o8.pts[0].x,o8.pts[0].y);if(od<400){hunted=true;break;}}}
+if(!hunted){s.__brk=tickN+180;s.boost=false;}}}
+s.__cirT=tickN;s.__cx=h0.x;s.__cy=h0.y;}
+if(s.aiT<=0){s.aiT=6;aiThink(s);}
 s.tAngle=s.aiA;
 }
 function moveSnake(s){
@@ -527,7 +565,7 @@ var h=s.pts[0];
 var turn=0.13;
 s.angle+=Math.max(-turn,Math.min(turn,norm(s.tAngle-s.angle)));
 var zm=zoomOf(s);
-var sp=(3.0/zm)*(1+(1-zm)*0.4)*((s.boost&&s.score>28)?1.8:1);
+var sp=(3.0/zm)*(1+(1-zm)*0.4)*(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1.8:1);
 if((s.fzT||0)>tickN)sp*=1.25;
 h.x+=Math.cos(s.angle)*sp;h.y+=Math.sin(s.angle)*sp;
 var dc=Math.hypot(h.x,h.y),lim=WORLD_R-rad(s);
@@ -560,7 +598,7 @@ var dW=0,ti=0,pi=1;
 var ax=s.trail[0].x,ay=s.trail[0].y;
 while(pi*SP<=targetPx+0.001&&ti<s.trail.length-1){
 var bx=s.trail[ti+1].x,by=s.trail[ti+1].y;
-var seg=Math.hypot(bx-ax,by-ay);
+var seg=Math.sqrt((bx-ax)*(bx-ax)+(by-ay)*(by-ay));
 if(seg<0.0001){ti++;continue;}
 var nd=pi*SP-dW;
 if(seg>=nd){
@@ -575,7 +613,7 @@ if(fd>0.5&&ti<s.trail.length-1){
 var nd2=targetPx-dW;
 while(ti<s.trail.length-1){
 var bx2=s.trail[ti+1].x,by2=s.trail[ti+1].y;
-var seg2=Math.hypot(bx2-ax,by2-ay);
+var seg2=Math.sqrt((bx2-ax)*(bx2-ax)+(by2-ay)*(by2-ay));
 if(seg2<0.0001){ti++;continue;}
 if(seg2>=nd2){var t2=nd2/seg2;var fx2=ax+(bx2-ax)*t2,fy2=ay+(by2-ay)*t2;
 if(pts[pi]){pts[pi].x=fx2;pts[pi].y=fy2;}else pts.push({x:fx2,y:fy2});
@@ -599,7 +637,7 @@ if(md2<130*130&&md2>1){var md=Math.sqrt(md2);mf.x+=mdx/md*4.5;mf.y+=mdy/md*4.5;}
 for(var i=foods.length-1;i>=0;i--){
 var f=foods[i];
 if(Math.abs(f.x-h.x)<r+4&&Math.abs(f.y-h.y)<r+4&&dist(h.x,h.y,f.x,f.y)<r+f.r){
-s.score+=f.v*(((s.x5T||0)>tickN)?2:1);foods.splice(i,1);
+var __inc=f.v*(((s.x5T||0)>tickN)?2:1);s.score+=__inc;s.__eat=(s.__eat||0)+__inc;if(f.b){s.boostT=tickN+240;}foods.splice(i,1);
 if(s.isPlayer){combo++;comboT=tickN;sfxEat(combo);}
 }
 }
@@ -614,10 +652,10 @@ var dst=Math.max(3,Math.floor(s.pts.length/150));
 for(var i=0;i<s.pts.length;i+=dst)spawnFood(s.pts[i].x+rnd(-6,6),s.pts[i].y+rnd(-6,6),2);
 s.magT=s.shdT=s.zmT=s.x5T=s.fzT=0;s.skillN=0;s.killChain=0;
 // 死亡即清账: 蘑菇待回收额/待到期效果必须清零, 否则重生后回收逻辑把分数持续钉死在26(吃多少扣多少)
-s.mushs=[];s.mushDrain=0;
+s.mushs=[];s.mushDrain=0;s.boostT=0;
 if(killer&&killer!==s){
 killer.kills++;
-if(tickN-(killer.lastKillT||-9999)<480){killer.killChain=Math.min(5,(killer.killChain||0)+1);killer.score+=50*killer.killChain;}
+if(tickN-(killer.lastKillT||-9999)<480){killer.killChain=Math.min(5,(killer.killChain||0)+1);killer.score+=50*killer.killChain;killer.__chain=(killer.__chain||0)+50*killer.killChain;}
 else killer.killChain=1;
 killer.lastKillT=tickN;
 killer.skillN=Math.min(3,(killer.skillN||0)+1);
@@ -681,7 +719,6 @@ return;
 }
 tickN++;
 if(LAN.mode===2){clientTick();return;}
-if(player&&!AUTO)player.boost=(Object.keys(boostIds).length>0)||mouseBoost;
 if(tickN-comboT>90)combo=0;
 if(player){if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;}
 for(var k=0;k<snakes.length;k++){
@@ -698,10 +735,11 @@ if(s.mushDrain>0){var mdd=Math.min(s.mushDrain,3);if(s.score-mdd<26)mdd=Math.max
 collisions();
 if(player.alive)aliveTicks++;
 while(foods.length<FOOD_N)spawnFood();
+if(tickN%30===15){var bn0=0;for(var bi0=0;bi0<foods.length;bi0++)if(foods[bi0].b)bn0++;while(bn0<BOOST_N){spawnBoostBean();bn0++;}}
 if(tickN%900===450&&powers.length<4)spawnPower();
 if(tickN%20===0)updateHUD();
 if(tickN%10===0)drawMap();
-if(LAN.mode===1){var anyR=false;var withFd=tickN%6===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
+if(LAN.mode===1&&tickN%2===0){var anyR=false;var withFd=tickN%12===0;for(var cid in remotes){lanSendTo(cid,buildSnap(cid,remotes[cid],withFd));anyR=true;}if(anyR){LAN.snapSent++;for(var sf=0;sf<snakes.length;sf++)snakes[sf].snapFull=false;}}
 // 心跳超时兜底: 6秒无任何上行消息的客机按僵尸连接移除(Java层另有5秒读超时)
 if(LAN.mode===1&&tickN%60===0){for(var zc in remotes){var zs=remotes[zc];if(zs.lastInT!==undefined&&tickN-zs.lastInT>900){dbg('心跳超时移除 id='+zc+' lastInT='+zs.lastInT+' tickN='+tickN);var zix=snakes.indexOf(zs);if(zix>=0)snakes.splice(zix,1);delete remotes[zc];delete LAN.sentSeq[zc];}}}
 if(window.__LANTEST__&&LAN.mode===1&&tickN%60===0){var rs0=null;for(var c0 in remotes){rs0=remotes[c0];break;}slog('[LAN] sent='+LAN.snapSent+' snakes='+snakes.length+' remotes='+Object.keys(remotes).length+' rmtScore='+(rs0?Math.floor(rs0.score):-1));}
@@ -801,8 +839,13 @@ ctx.stroke();ctx.globalAlpha=1;
 ctx.strokeStyle=C.danger;ctx.globalAlpha=0.45;ctx.lineWidth=6;ctx.beginPath();ctx.arc(0,0,WORLD_R,0,6.29);ctx.stroke();ctx.globalAlpha=1;
 var vx0=focus.x-vw/2-40,vx1=focus.x+vw/2+40,vy0=focus.y-vh/2-40,vy1=focus.y+vh/2+40;
 for(var i=0;i<foods.length;i++){var f=foods[i];if(f.x<vx0||f.x>vx1||f.y<vy0||f.y>vy1)continue;
-ctx.globalAlpha=0.35;ctx.fillStyle=f.c;ctx.beginPath();ctx.arc(f.x,f.y,f.r*2.1,0,6.29);ctx.fill();
+if(f.b){var bp=1+0.15*Math.sin(tickN*0.15+i);
+ctx.globalAlpha=0.4;ctx.fillStyle='#58a6ff';ctx.beginPath();ctx.arc(f.x,f.y,f.r*2.4*bp,0,6.29);ctx.fill();
 ctx.globalAlpha=1;ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,6.29);ctx.fill();
+ctx.fillStyle='#fff';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.fillText('速',f.x,f.y+3);
+ctx.strokeStyle='rgba(88,166,255,'+(0.5+0.3*Math.sin(tickN*0.15+i))+')';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(f.x,f.y,f.r*1.7*bp,0,6.29);ctx.stroke();
+continue;}
+var fsz=f.r*4.4;ctx.drawImage(foodSprite(f.c),f.x-fsz/2,f.y-fsz/2,fsz,fsz);
 }
 for(var pwi=0;pwi<powers.length;pwi++){var pw=powers[pwi];if(pw.x<vx0||pw.x>vx1||pw.y<vy0||pw.y>vy1)continue;
 ctx.globalAlpha=0.28+0.14*Math.sin(tickN*0.1+pwi);ctx.fillStyle=PWC[pw.type];ctx.beginPath();ctx.arc(pw.x,pw.y,pw.r*1.9,0,6.29);ctx.fill();
@@ -833,12 +876,19 @@ ctx.stroke();
 for(var g2=0;g2<3;g2++){ctx.strokeStyle='hsla('+((hue0+g2*60)%360)+',90%,65%,'+(0.35-g2*0.1)+')';ctx.lineWidth=3;ctx.beginPath();ctx.arc(h.x,h.y,r*2.2+g2*6+Math.sin(tickN*0.08+g2)*3,0,6.29);ctx.stroke();}
 }else{
 ctx.strokeStyle=s.color;ctx.lineWidth=r*1.7;
-// 大蛇渲染抽稀: 点间距仅5px, 隔点连线视觉无差别, 大幅降低多蛇后期的描边开销
+// 渲染抽稀: 点间距仅5px, 屏幕间距<6px时人眼无差别; 按蛇长+缩放级别取步长, 大幅降低多蛇后期描边开销
 var rst=s.pts.length>1800?4:(s.pts.length>900?3:(s.pts.length>300?2:1));
+var rstZ=Math.ceil(6/(SP*zoom));if(rstZ>rst)rst=rstZ;
+// 视口剔除: 视野外身段不进描边路径(大蛇横穿地图时省掉大半线段)
+var mx0=vx0-r*2,mx1=vx1+r*2,my0=vy0-r*2,my1=vy1+r*2,inSeg=false;
+var pp9=s.pts,n9=pp9.length;
 ctx.beginPath();
-ctx.moveTo(s.pts[s.pts.length-1].x,s.pts[s.pts.length-1].y);
-for(var i3=s.pts.length-2;i3>=0;i3-=rst)ctx.lineTo(s.pts[i3].x,s.pts[i3].y);
-if((s.pts.length-2)%rst!==0&&s.pts.length>1)ctx.lineTo(s.pts[0].x,s.pts[0].y);
+for(var i3=n9-1;i3>=0;i3-=rst){var p3=pp9[i3];
+var sx3=p3.x,sy3=p3.y;
+if(i3>0&&i3<n9-1){sx3=pp9[i3-1].x*0.25+sx3*0.5+pp9[i3+1].x*0.25;sy3=pp9[i3-1].y*0.25+sy3*0.5+pp9[i3+1].y*0.25;}
+if(sx3<mx0||sx3>mx1||sy3<my0||sy3>my1){inSeg=false;continue;}
+if(!inSeg){ctx.moveTo(sx3,sy3);inSeg=true;}else ctx.lineTo(sx3,sy3);}
+var hp0=pp9[0];if(hp0.x>=mx0&&hp0.x<=mx1&&hp0.y>=my0&&hp0.y<=my1){if(inSeg)ctx.lineTo(hp0.x,hp0.y);else{ctx.moveTo(hp0.x,hp0.y);ctx.lineTo(hp0.x+0.01,hp0.y);}}
 ctx.stroke();
 if(s.score>=1000){
 for(var g3=0;g3<3;g3++){ctx.strokeStyle='rgba(255,215,0,'+(0.4-g3*0.12)+')';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(h.x,h.y,r*2.2+g3*6+Math.sin(tickN*0.08+g3)*3,0,6.29);ctx.stroke();}
@@ -862,6 +912,12 @@ if(bornA<1)ctx.globalAlpha=1;
 ctx.restore();
 if(ox>0.5||oy>0.5){ctx.strokeStyle=C.grid;ctx.globalAlpha=0.5;ctx.lineWidth=1;ctx.strokeRect(ox+0.5,oy+0.5,vwPx-1,vhPx-1);ctx.globalAlpha=1;}
 }
+var foodSprites={};
+function foodSprite(c){var sp0=foodSprites[c];if(sp0)return sp0;
+var fc=document.createElement('canvas');fc.width=fc.height=24;var fx2=fc.getContext('2d');
+fx2.globalAlpha=0.35;fx2.fillStyle=c;fx2.beginPath();fx2.arc(12,12,10,0,6.29);fx2.fill();
+fx2.globalAlpha=1;fx2.beginPath();fx2.arc(12,12,4.8,0,6.29);fx2.fill();
+foodSprites[c]=fc;return fc;}
 var mapCv=null,mapCtx=null;
 function drawMap(){
 if(!mapCv){mapCv=$('map');if(!mapCv)return;mapCtx=mapCv.getContext('2d');}
@@ -893,6 +949,7 @@ if((player.shdT||0)>tickN)fx+=' 盾'+Math.ceil((player.shdT-tickN)/60);
 if((player.zmT||0)>tickN)fx+=' 镜'+Math.ceil((player.zmT-tickN)/60);
 if((player.x5T||0)>tickN)fx+=' ×2:'+Math.ceil((player.x5T-tickN)/60);
 if((player.fzT||0)>tickN)fx+=' 狂'+Math.ceil((player.fzT-tickN)/60);
+if((player.boostT||0)>tickN)fx+=' 速'+Math.ceil((player.boostT-tickN)/60);
 if((player.skillN||0)>0)fx+=' 技×'+player.skillN;
 $('hFx').textContent=fx;
 $('skillBtn').style.display=((player.skillN||0)>0&&player.alive)?'block':'none';
@@ -907,14 +964,21 @@ function showDeath(){
 var rec=recordScore();
 var o=$('ovl');
 o.style.display='flex';
-o.innerHTML='<h3>你阵亡了</h3><p>本局长度 '+Math.floor(player.score)+' · 击杀 '+player.kills+' · 存活 '+Math.floor(aliveTicks/60)+'s</p>'+hsListHTML(rec.a,rec.id)+'<button class="btn" id="reviveBtn">再来一局</button>';
+o.innerHTML='<h3>你阵亡了</h3><p>本局长度 '+Math.floor(player.score)+' · 击杀 '+player.kills+' · 存活 '+Math.floor(aliveTicks/60)+'s</p>'+hsListHTML(rec.a,rec.id)+'<button class="btn" id="reviveBtn">再来一局</button> <button class="btn btn2" id="saveLogBtn">保存日志</button>';
 $('reviveBtn').onclick=function(){revive();};
+$('saveLogBtn').onclick=function(){saveLogToFile(this)};
+}
+function saveLogToFile(btn){
+var prev='';try{var pl3=JSON.parse(localStorage.getItem('snake_log_prev')||'[]');if(pl3&&pl3.length)prev='\n=== 上一局日志(重载/闪退前) ===\n'+pl3.join('\n');}catch(e){}
+var t='版本 v'+VERSION+' 设备时间 '+new Date().toLocaleString()+'\n'+DBG.join('\n')+prev;
+if(window.Android&&Android.saveLog){try{var path=Android.saveLog(t);dbg('日志已保存 '+path);
+if(btn)btn.textContent='已保存';setTimeout(function(){alert('日志已保存到:\n'+path);},50);return;}catch(e){dbg('保存日志失败 '+e.message);}}
+try{navigator.clipboard.writeText(t);alert('无文件保存通道, 日志已复制到剪贴板');}catch(e2){alert('保存失败, 请用调试面板复制日志');}
 }
 function revive(){
 if(LAN.mode===2){dbg('点击再来一局, 发送rv');lanSend({t:'rv'});$('ovl').style.display='none';ac();musStart();return;}
-player.score=26;player.kills=0;player.mushs=[];player.mushDrain=0;aliveTicks=0;player.alive=true;player.grace=160;player.boost=false;boostIds={};mouseBoost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);player.snapFull=true;
+player.score=26;player.kills=0;player.mushs=[];player.mushDrain=0;player.boostT=0;aliveTicks=0;player.alive=true;player.grace=160;player.boost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);player.snapFull=true;
 $('ovl').style.display='none';
-$('boostBtn').className='';
 ac();musStart();sfxStart();
 }
 function togglePause(){
@@ -996,6 +1060,7 @@ $('joinBtn').onclick=lanJoinRoom;
 function refreshTgl(){$('musBtn').textContent='音乐·'+(musOn?'开':'关');$('sfxBtn').textContent='音效·'+(sfxOn?'开':'关');}
 $('musBtn').onclick=function(){musOn=!musOn;saveAP();refreshTgl();if(musOn){ac();musStart();}};
 $('sfxBtn').onclick=function(){sfxOn=!sfxOn;saveAP();refreshTgl();};
+$('logBtn').onclick=function(){toggleDbg();};
 refreshTgl();
 function showMenu(){
 if(LAN.mode&&window.Android&&Android.lanStop){try{Android.lanStop();}catch(e){}}
@@ -1015,16 +1080,9 @@ $('cancelBtn').onclick=function(){o.style.display='none';paused=false;$('pauseBt
 };
 function setTarget(cx,cy){if(!player||!player.alive)return;player.tAngle=Math.atan2(cy-H/2,cx-W/2);}
 cv.addEventListener('pointermove',function(e){setTarget(e.clientX,e.clientY);});
-var bb=$('boostBtn');
 $('skillBtn').addEventListener('pointerdown',function(e){e.preventDefault();if(!player||!player.alive)return;if(activateSkill(player)&&LAN.mode===2)lanSend({t:'sk'});});
-function updB(){var held=Object.keys(boostIds).length>0;if(player&&!AUTO)player.boost=held||mouseBoost;bb.className=held?'on':'';}
-cv.addEventListener('pointerdown',function(e){setTarget(e.clientX,e.clientY);if(e.pointerType==='mouse'){mouseBoost=true;updB();}});
-window.addEventListener('pointerup',function(e){if(e.pointerType==='mouse')mouseBoost=false;delete boostIds[e.pointerId];updB();});
-window.addEventListener('pointercancel',function(e){if(e.pointerType==='mouse')mouseBoost=false;delete boostIds[e.pointerId];updB();});
+cv.addEventListener('pointerdown',function(e){setTarget(e.clientX,e.clientY);});
 cv.addEventListener('contextmenu',function(e){e.preventDefault();});
-bb.addEventListener('pointerdown',function(e){e.preventDefault();boostIds[e.pointerId]=1;try{bb.setPointerCapture(e.pointerId);}catch(err){}updB();});
-bb.addEventListener('pointerup',function(e){delete boostIds[e.pointerId];updB();});
-bb.addEventListener('pointercancel',function(e){delete boostIds[e.pointerId];updB();});
 var joy=$('joy'),knob=$('joyKnob'),joyId=null;
 function joyVec(e){
 var r=joyRect||(joyRect=joy.getBoundingClientRect());
@@ -1041,18 +1099,30 @@ joy.addEventListener('pointermove',function(e){if(e.pointerId===joyId)joyVec(e);
 joy.addEventListener('pointerup',joyReset);
 joy.addEventListener('pointercancel',joyReset);
 document.addEventListener('visibilitychange',function(){if(document.hidden&&started&&!paused)togglePause();});
-var rafOn=false,fbOn=false,lastTk=0,lastRaf=0;
+var rafOn=false,fbOn=false,lastTk=0,lastRaf=0,__pfTk=0,__pfRd=0,__pfTn=0,__pfRn=0;
 function frame(now){
 if(fbOn)return;
 rafOn=true;lastRaf=now;
 var ticked=false;
-if(!lastTk||now-lastTk>=15){lastTk=now;ticked=true;try{tick();}catch(e){slog('[ERR] '+(e&&e.message));}}
-if(ticked||needRender){needRender=false;try{render();}catch(e){slog('[ERR] '+(e&&e.message));}}
+var __t0=0;
+if(!lastTk||now-lastTk>=15){lastTk=now;ticked=true;__t0=performance.now();try{tick();}catch(e){slog('[ERR] '+(e&&e.message));}__pfTk+=performance.now()-__t0;__pfTn++;}
+if(ticked||needRender){needRender=false;__t0=performance.now();try{render();}catch(e){slog('[ERR] '+(e&&e.message));}__pfRd+=performance.now()-__t0;__pfRn++;}
+if(__pfTn>=300){var __ft=__pfTk/__pfTn+__pfRd/Math.max(1,__pfRn);
+if(__ft>11&&DPR>1.01){QDPR=Math.max(1,DPR-0.25);dbg('帧耗'+__ft.toFixed(1)+'ms 降画质 DPR='+QDPR.toFixed(2));resize();}
+else if(__ft<5&&QDPR>0&&QDPR<Math.min(1.5,window.devicePixelRatio||1)){QDPR=Math.min(Math.min(1.5,window.devicePixelRatio||1),QDPR+0.25);dbg('帧耗'+__ft.toFixed(1)+'ms 恢复画质 DPR='+QDPR.toFixed(2));resize();}
+if(window.__PERF__)slog('[PERF] tick avg='+(__pfTk/__pfTn).toFixed(2)+'ms render avg='+(__pfRd/Math.max(1,__pfRn)).toFixed(2)+'ms frames='+__pfRn+' dpr='+DPR.toFixed(2));
+__pfTk=__pfRd=0;__pfTn=__pfRn=0;}
 requestAnimationFrame(frame);
 }
 function loop(){
 fbOn=true;
-try{tick();render();}catch(e){slog('[ERR] '+(e&&e.message));}
+var __l0=performance.now();try{tick();}catch(e){slog('[ERR] '+(e&&e.message));}__pfTk+=performance.now()-__l0;__pfTn++;
+__l0=performance.now();try{render();}catch(e){slog('[ERR] '+(e&&e.message));}__pfRd+=performance.now()-__l0;__pfRn++;
+if(__pfTn>=300){var __ft2=__pfTk/__pfTn+__pfRd/Math.max(1,__pfRn);
+if(__ft2>11&&DPR>1.01){QDPR=Math.max(1,DPR-0.25);dbg('帧耗'+__ft2.toFixed(1)+'ms 降画质 DPR='+QDPR.toFixed(2));resize();}
+else if(__ft2<5&&QDPR>0&&QDPR<Math.min(1.5,window.devicePixelRatio||1)){QDPR=Math.min(Math.min(1.5,window.devicePixelRatio||1),QDPR+0.25);dbg('帧耗'+__ft2.toFixed(1)+'ms 恢复画质 DPR='+QDPR.toFixed(2));resize();}
+if(window.__PERF__)slog('[PERF] tick avg='+(__pfTk/__pfTn).toFixed(2)+'ms render avg='+(__pfRd/Math.max(1,__pfRn)).toFixed(2)+'ms frames='+__pfRn+' dpr='+DPR.toFixed(2));
+__pfTk=__pfRd=0;__pfTn=__pfRn=0;}
 setTimeout(loop,16);
 }
 setInterval(function(){
