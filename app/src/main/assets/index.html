@@ -15,7 +15,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e1013;font-family:
 .lb .me{color:#f2f3f5;font-weight:600}
 .lb .lbt{font-weight:600;color:#f2f3f5;margin-bottom:2px}
 #joy{position:fixed;left:calc(20px + env(safe-area-inset-left));bottom:calc(20px + env(safe-area-inset-bottom));width:116px;height:116px;border-radius:50%;border:1.5px solid #3a4048;background:rgba(255,255,255,0.05);z-index:6;touch-action:none}
-#map{position:fixed;left:calc(20px + env(safe-area-inset-left));bottom:calc(146px + env(safe-area-inset-bottom));width:100px;height:100px;border-radius:50%;border:1px solid #2a2f37;background:rgba(20,22,27,0.55);z-index:5;pointer-events:none}
+#map{position:fixed;left:calc(20px + env(safe-area-inset-left));bottom:calc(146px + env(safe-area-inset-bottom));width:100px;height:100px;border-radius:50%;border:1px solid #2a2f37;background:rgba(20,22,27,0.55);z-index:5;pointer-events:auto;touch-action:none}
 #joyKnob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.3)}
 #skillBtn{position:fixed;right:calc(110px + env(safe-area-inset-right));bottom:calc(36px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;border:1.5px solid #e3b341;background:rgba(227,179,65,0.15);color:#ffe08a;font-size:12px;font-family:inherit;z-index:6;touch-action:none}
 .ovl{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;background:rgba(10,11,14,0.82);z-index:10;text-align:center;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -37,7 +37,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e1013;font-family:
 #musBtn{right:158px}
 #logBtn{right:230px}
 #sfxBtn{right:86px}
-#exitBtn{right:230px}
+#exitBtn{right:302px}
 .btn2{background:transparent;color:#f2f3f5}
 #lanInfo{font-size:13px;color:#9aa0a8;min-height:18px;line-height:22px}
 #lanInfo input{padding:6px 10px;border-radius:8px;border:1px solid #3a4048;background:rgba(255,255,255,0.06);color:#f2f3f5;font-family:inherit;width:130px;outline:none}
@@ -90,7 +90,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='3.9';
+var VERSION='4.0';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -182,7 +182,7 @@ function saveHS(a){HS_MEM=a;try{localStorage.setItem('snake_hs',JSON.stringify(a
 function recordScore(){var e={n:player.name,s:Math.floor(player.score),k:player.kills,t:Math.floor(aliveTicks/60),d:Date.now()+Math.random()};var a=loadHS();a.push(e);a.sort(function(x,y){return y.s-x.s;});a=a.slice(0,10);saveHS(a);return{a:a,id:e.d};}
 function esc(s){return String(s).replace(/[<>&"]/g,'');}
 function hsListHTML(a,curId){if(!a.length)return '';var h='<div class="hs"><div class="t">历史最高分 TOP '+a.length+'</div>';for(var i=0;i<a.length;i++){var e=a[i];h+='<div class="r'+(e.d===curId?' cur':'')+'"><span>'+(i+1)+'. '+esc(e.n)+'</span><span>'+e.s+'</span></div>';}return h+'</div>';}
-var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:false,pendingJoin:false,sentSeq:{},lastSnapTk:-1,lastSnapTick:0,rebases:0,gaps:0,teleports:0};
+var LAN={mode:0,snapSent:0,snapRecv:0,ownIdx:-1,cSnakes:[],cFoods:[],entered:false,pendingJoin:false,sentSeq:{},lastSnapTk:-1,lastSnapTick:0,lastSnapAt:0,rebases:0,gaps:0,teleports:0};
 var ownHist=[];
 // 机内调试日志: 环形缓冲 + 游戏内面板(快速点小地图5次开关)
 var DBG=[],dbgOn=false,mapTapTs=[];
@@ -333,7 +333,7 @@ if(withFd){pw=[];for(var pi3=0;pi3<powers.length;pi3++){var p3=powers[pi3];pw.pu
 return{t:'snap',tk:tickN,pz:paused?1:0,sn:sn,fd:fd,pw:pw};
 }
 function applySnap(m){
-LAN.snapRecv++;LAN.lastSnapTick=tickN;
+LAN.snapRecv++;LAN.lastSnapTick=tickN;LAN.lastSnapAt=Date.now();
 // 快照序号断档(发送队列丢旧保新会丢包) → 增量轨迹出现空洞, 请求全量重同步
 // 序号断档: 小断档靠逐蛇 pile 检测精准重同步自愈; 只有大断档(>20tick≈0.33s,    可能丢了重生/全量标记)才请求全场重同步
 if(LAN.lastSnapTk>=0&&m.tk-LAN.lastSnapTk>20){LAN.gaps++;dbg('快照大断档 +'+(m.tk-LAN.lastSnapTk)+' 请求全场重同步');lanSend({t:'rs'});}
@@ -465,8 +465,8 @@ if((s.__pile||0)>20&&tickN-(s.__rsT||-9999)>120){s.__rsT=tickN;dbg('轨迹不足
 }
 for(var tf=0;tf<foods.length;tf++){var fo=foods[tf];if(fo.tx!==undefined){fo.x+=(fo.tx-fo.x)*0.35;fo.y+=(fo.ty-fo.y)*0.35;}}
 if(LAN.snapRecv===0&&tickN%90===0)lanSend({t:'hello',n:player.name,c:player.color});
-// 断线看门狗: 收过快照后连续2.5秒无快照 → 判定掉线, 弹窗退出僵尸局(暂停期间不触发)
-if(LAN.snapRecv>0&&!paused&&tickN-LAN.lastSnapTick>150){dbg('看门狗触发: 无快照');showLanDead();return;}
+// 断线看门狗必须按墙钟计算：低帧率/后台降频时 tick 计时会把 2.5 秒拖成几十秒，形成僵尸局
+if(LAN.snapRecv>0&&!paused&&LAN.lastSnapAt&&Date.now()-LAN.lastSnapAt>2500){dbg('看门狗触发: 无快照 wall='+(Date.now()-LAN.lastSnapAt));showLanDead();return;}
 // 输入上报30Hz(主机每帧都要在主线程处理, 降频减负; 转向是连续量, 33ms 足够)
 if(tickN%2===0)lanSend({t:'in',a:+player.tAngle.toFixed(3),b:player.boost?1:0});
 if(tickN%20===0)updateHUD();
@@ -711,8 +711,8 @@ if(!s.alive)break;
 }
 function tick(){
 if(paused||!started){
-// 暂停时从机持续发心跳(tickN已冻结, 用墙钟), 防主机读超时误踢长暂停的从机
-if(paused&&started&&LAN.mode===2){var nwn=Date.now();if(nwn-(LAN.lastHb||0)>1000){LAN.lastHb=nwn;lanSend({t:'hb'});}}
+// 等待房主开局/暂停时 tickN 都冻结，从机必须按墙钟持续心跳，防 Java 10 秒读超时误踢
+if(LAN.mode===2){var nwn=Date.now();if(nwn-(LAN.lastHb||0)>1000){LAN.lastHb=nwn;lanSend({t:'hb'});}}
 // 主机暂停时仍按10Hz发快照(带pz=1): 从机即使丢了pz消息也能自愈同步暂停态, 不会误判断线
 if(paused&&started&&LAN.mode===1){var pn2=Date.now();if(pn2-(LAN.lastPSnap||0)>100){LAN.lastPSnap=pn2;for(var pc2 in remotes)lanSendTo(pc2,buildSnap(pc2,remotes[pc2],false));}}
 return;

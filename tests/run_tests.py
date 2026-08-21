@@ -58,6 +58,8 @@ def gen_files():
         shutil.rmtree(WORK)
     os.makedirs(WORK)
     src = open(INDEX, encoding='utf-8').read()
+    # 固定测试随机数，避免 AI 出生/死亡随机波动造成相同代码偶发假红；联机节点按 window.name 派生不同种子。
+    seed_js = "(function(){var s=1592594996;for(var i=0;i<(window.name||'').length;i++)s=(s*33+(window.name.charCodeAt(i)||0))>>>0;Math.random=function(){s=(s*1664525+1013904223)>>>0;return s/4294967296;};})();"
     # ---- 单人测试页: 吃豆/对冲/道具/技能/光环/间距/撞体/多点触控/技能视野 ----
     probes = r"""
 if(window.__BODYTEST__&&tickN===700){
@@ -90,7 +92,18 @@ if(tickN===1520&&window.__MUSHTEST__){player.mushDrain=480;player.mushs=[{t:tick
 if(tickN===1540&&window.__MUSHTEST__){revive();player.grace=999999;}
 if(tickN>=1550&&tickN<=1560&&window.__MUSHTEST__){var fh=player.pts[0];if(fh)for(var fi=0;fi<6;fi++)spawnFood(fh.x+rnd(-14,14),fh.y+rnd(-14,14),2);}
 if(tickN===1740&&window.__MUSHTEST__){slog('[TEST] afterRevive alive='+(player.alive?1:0)+' score='+Math.round(player.score)+' drain='+(player.mushDrain||0));}
-if(tickN===100&&window.__AITEST__){slog('[TEST] logBtn='+(document.getElementById('logBtn')?1:0));}
+if(tickN===100&&window.__AITEST__){
+var lb9=document.getElementById('logBtn'),eb9=document.getElementById('exitBtn'),mp9=document.getElementById('map');
+var lr9=lb9&&lb9.getBoundingClientRect(),er9=eb9&&eb9.getBoundingClientRect();
+var noOverlap9=!!(lr9&&er9&&(lr9.right<=er9.left||er9.right<=lr9.left||lr9.bottom<=er9.top||er9.bottom<=lr9.top));
+slog('[TEST] logBtn='+(lb9?1:0)+' noOverlap='+(noOverlap9?1:0)+' mapPointer='+(mp9?getComputedStyle(mp9).pointerEvents:'none'));
+var os9=started,om9=LAN.mode,oh9=LAN.lastHb,send9=lanSend,hb9=0;
+started=false;LAN.mode=2;LAN.lastHb=Date.now()-1500;lanSend=function(o){if(o&&o.t==='hb')hb9++;};tick();
+started=os9;LAN.mode=om9;LAN.lastHb=oh9;lanSend=send9;
+slog('[TEST] waitRoomHb='+hb9);
+var sr9=LAN.snapRecv,sa9=LAN.lastSnapAt;LAN.snapRecv=1;LAN.lastSnapAt=Date.now()-3000;
+slog('[TEST] wallWatchdog='+((LAN.snapRecv>0&&Date.now()-LAN.lastSnapAt>2500)?1:0));LAN.snapRecv=sr9;LAN.lastSnapAt=sa9;
+}
 if(tickN===1525&&window.__MUSHTEST__){slog('[TEST] saveLogBtn='+(document.getElementById('saveLogBtn')?1:0)+' boostBtnGone='+(document.getElementById('boostBtn')?0:1));}
 // T49: AI 激进度——每120tick记录各AI蛇头, 算直线性(原地打转则位移/路程比极低); 统计AI成长
 if(tickN===300&&window.__AITEST__){window.__aiTrack={};for(var ai0=0;ai0<snakes.length;ai0++){var a0=snakes[ai0];if(!a0.isPlayer)window.__aiTrack[a0.uid]={path:0,disp:0,lx:a0.pts[0].x,ly:a0.pts[0].y,sx:a0.pts[0].x,sy:a0.pts[0].y};}}
@@ -124,14 +137,14 @@ if(tickN===1780&&window.__BEANTEST__){player.grace=999999;player.aiT=99999;var b
 if(tickN===1810&&window.__BEANTEST__){var bh2=player.pts[0];window.__spd0=Math.sqrt((bh2.x-window.__bx)*(bh2.x-window.__bx)+(bh2.y-window.__by)*(bh2.y-window.__by))/30;foods.push({x:bh2.x+30,y:bh2.y,r:5,v:1,c:'#58a6ff',b:1});window.__bx=bh2.x;window.__by=bh2.y;}
 if(tickN===1845&&window.__BEANTEST__){var bh3=player.pts[0];window.__spd1=Math.sqrt((bh3.x-window.__bx)*(bh3.x-window.__bx)+(bh3.y-window.__by)*(bh3.y-window.__by))/35;slog('[TEST] bean spd0='+window.__spd0.toFixed(2)+' spd1='+window.__spd1.toFixed(2)+' ratio='+(window.__spd1/window.__spd0).toFixed(2)+' boostT='+((player.boostT||0)>tickN?1:0)+' scoreCost='+(window.__bsc-player.score).toFixed(1));}
 """
-    g = src.replace('<body>', '<body><script>window.__AUTOPILOT__=true;window.__FORCE_FB__=true;'
+    g = src.replace('<body>', '<body><script>' + seed_js + 'window.__AUTOPILOT__=true;window.__FORCE_FB__=true;'
         'window.__EATTEST__=true;window.__AURATEST__=true;window.__HEADTEST__=true;'
         'window.__POWTEST__=true;window.__BODYTEST__=true;window.__SKZOOM__=true;window.__MTTEST__=true;'
         'window.__SPAWNTEST__=true;window.__CHAINTEST__=true;window.__MUSHTEST__=true;window.__AITEST__=true;window.__BEANTEST__=true;</script>', 1)
     g = g.replace('if(window.__EATTEST__){', probes + '\nif(window.__EATTEST__){', 1)
     open(os.path.join(WORK, 'g.html'), 'w', encoding='utf-8').write(g)
     # ---- 联机节点页 ----
-    fb = src.replace('<body>', '<body><script>(function(){var p="LS_"+(window.name||"")+"_",o=window.localStorage;'
+    fb = src.replace('<body>', '<body><script>' + seed_js + '(function(){var p="LS_"+(window.name||"")+"_",o=window.localStorage;'
         'Object.defineProperty(window,"localStorage",{get:function(){return{getItem:function(k){return o.getItem(p+k)},'
         'setItem:function(k,v){o.setItem(p+k,v)},removeItem:function(k){o.removeItem(p+k)},clear:function(){o.clear()}}}});})();'
         'window.__FORCE_FB__=true;window.__LANTEST__=true;window.__AUTOPILOT__=true;</script>', 1)
@@ -142,11 +155,11 @@ if(tickN===1845&&window.__BEANTEST__){var bh3=player.pts[0];window.__spd1=Math.s
         "lanSend:function(o){lanSend(o);}};\n})();")
     open(os.path.join(WORK, 'lan_fb.html'), 'w', encoding='utf-8').write(fb)
     # ---- 10分钟耐久页(锐角/异常扫描) ----
-    sk = src.replace('<body>', '<body><script>window.__AUTOPILOT__=true;window.__FORCE_FB__=true;window.__SOAK__=true;</script>', 1)
+    sk = src.replace('<body>', '<body><script>' + seed_js + 'window.__AUTOPILOT__=true;window.__FORCE_FB__=true;window.__SOAK__=true;</script>', 1)
     sk = sk.replace('if(window.__EATTEST__){', probes + '\nif(window.__EATTEST__){', 1)
     open(os.path.join(WORK, 'soak.html'), 'w', encoding='utf-8').write(sk)
     # ---- 真实帧耗页(大蛇高负载, 非虚拟时间) ----
-    pf = src.replace('<body>', '<body><script>window.__PERF__=true;window.__AUTOPILOT__=true;window.__BIGTEST__=true;window.__FORCE_FB__=true;</script>', 1)
+    pf = src.replace('<body>', '<body><script>' + seed_js + 'window.__PERF__=true;window.__AUTOPILOT__=true;window.__BIGTEST__=true;window.__FORCE_FB__=true;</script>', 1)
     pf = pf.replace('if(AUTO){', 'if(window.__BIGTEST__&&tickN===120){for(var bi9=0;bi9<snakes.length;bi9++){snakes[bi9].score=2600;snakes[bi9].vlen=2600;}}\nif(AUTO){', 1)
     open(os.path.join(WORK, 'perf.html'), 'w', encoding='utf-8').write(pf)
     # ---- 三人联机仿真 ----
@@ -208,8 +221,16 @@ def solo_tests():
     check('T50b', '阵亡弹窗有保存日志按钮/加速按钮已移除',
           m and m.group(1) == '1' and m.group(2) == '1',
           m.group(0) if m else '无日志')
-    m = re.search(r'logBtn=(\d)', joined)
-    check('T55', '日志按钮在声音开关旁', m and m.group(1) == '1', m.group(0) if m else '无日志')
+    m = re.search(r'logBtn=(\d) noOverlap=(\d) mapPointer=(\S+)', joined)
+    check('T55', '日志按钮可见可点且小地图调试入口可用',
+          m and m.group(1) == '1' and m.group(2) == '1' and m.group(3) != 'none',
+          m.group(0) if m else '无日志')
+    m = re.search(r'waitRoomHb=(\d+)', joined)
+    check('T58', '客机等待房主开局期间持续心跳', m and int(m.group(1)) >= 1,
+          m.group(0) if m else '无日志')
+    m = re.search(r'wallWatchdog=(\d)', joined)
+    check('T59', '断线看门狗使用墙钟而非游戏tick', m and m.group(1) == '1',
+          m.group(0) if m else '无日志')
 
 
 def view_tests():
