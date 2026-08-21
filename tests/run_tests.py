@@ -103,8 +103,20 @@ started=os9;LAN.mode=om9;LAN.lastHb=oh9;lanSend=send9;
 slog('[TEST] waitRoomHb='+hb9);
 var sr9=LAN.snapRecv,sa9=LAN.lastSnapAt;LAN.snapRecv=1;LAN.lastSnapAt=Date.now()-3000;
 slog('[TEST] wallWatchdog='+((LAN.snapRecv>0&&Date.now()-LAN.lastSnapAt>2500)?1:0));LAN.snapRecv=sr9;LAN.lastSnapAt=sa9;
+// T60: 地图被超长蛇占满时，安全出生失败必须返回false，禁止随机强塞进玩家身体。
+var aiS9=snakes[1],oldAlive9=aiS9.alive,oldClear9=clearOf;aiS9.alive=false;clearOf=function(){return false;};
+var safe9=place(aiS9,true);clearOf=oldClear9;aiS9.alive=oldAlive9;slog('[TEST] safeSpawnDeferred='+(safe9?0:1));
+// T61: 10000分远端蛇在从机使用15px身体采样；全量轨迹包按3倍跨度抽稀。
+var lm9=LAN.mode;LAN.mode=2;var ultra9={uid:99999,name:'超长',color:'#fff',isPlayer:false,isHuman:false,remote:false,pts:[{x:0,y:0}],trail:[],aggro:0.9,vlen:10000,score:10000,kills:0,alive:true,angle:0,tAngle:0,boost:false,boostBeans:0,tseq:17000,snapFull:true};
+for(var ui9=0;ui9<17000;ui9++)ultra9.trail.push({x:-ui9*3,y:Math.sin(ui9*0.01)*20});rebuildBody(ultra9);LAN.mode=lm9;
+snakes.push(ultra9);var up9=buildSnap(999,ultra9,false),ut9=null;for(var uj9=0;uj9<up9.sn.length;uj9++)if(up9.sn[uj9].u===ultra9.uid)ut9=up9.sn[uj9];snakes.pop();delete LAN.sentSeq[999];
+slog('[TEST] ultraRemote bodySP='+ultra9.bodySP+' pts='+ultra9.pts.length+' fullPairs='+(ut9?ut9.tr.length/2:-1));
+// T62: 玩家10000分时Boss AI作弊追赶到至少70%，并保持激进/加速状态。
+var ps9=player.score,pv9=player.vlen,saveAI9=[];for(var ak9=1;ak9<snakes.length;ak9++)saveAI9.push({s:snakes[ak9],score:snakes[ak9].score,aggro:snakes[ak9].aggro,brk:snakes[ak9].__brk,bt:snakes[ak9].boostT,sk:snakes[ak9].skillN,as:snakes[ak9].__assist});
+player.score=10000;var boss9=null;for(var ar9=0;ar9<120;ar9++)boss9=assistAI(true);slog('[TEST] aiAssist ratio='+(boss9?boss9.score/player.score:0).toFixed(3)+' boss='+(boss9&&boss9.__boss?1:0)+' aggro='+(boss9?boss9.aggro:0));
+player.score=ps9;player.vlen=pv9;for(var al9=0;al9<saveAI9.length;al9++){var av9=saveAI9[al9],aa9=av9.s;aa9.score=av9.score;aa9.aggro=av9.aggro;aa9.__brk=av9.brk;aa9.boostT=av9.bt;aa9.skillN=av9.sk;aa9.__assist=av9.as;aa9.__boss=0;}
 }
-if(tickN===1525&&window.__MUSHTEST__){slog('[TEST] saveLogBtn='+(document.getElementById('saveLogBtn')?1:0)+' boostBtnGone='+(document.getElementById('boostBtn')?0:1));}
+if(tickN===1525&&window.__MUSHTEST__){slog('[TEST] saveLogBtn='+(document.getElementById('saveLogBtn')?1:0)+' boostBtn='+(document.getElementById('boostBtn')?1:0));}
 // T49: AI 激进度——每120tick记录各AI蛇头, 算直线性(原地打转则位移/路程比极低); 统计AI成长
 if(tickN===300&&window.__AITEST__){window.__aiTrack={};for(var ai0=0;ai0<snakes.length;ai0++){var a0=snakes[ai0];if(!a0.isPlayer)window.__aiTrack[a0.uid]={path:0,disp:0,lx:a0.pts[0].x,ly:a0.pts[0].y,sx:a0.pts[0].x,sy:a0.pts[0].y};}}
 if(window.__AITEST__&&tickN>300&&tickN<=1800&&tickN%120===0){for(var uk in window.__aiTrack){var tr=window.__aiTrack[uk];var sn0=null;for(var ai1=0;ai1<snakes.length;ai1++)if(snakes[ai1].uid==uk)sn0=snakes[ai1];if(!sn0||!sn0.alive)continue;var hh0=sn0.pts[0];tr.path+=Math.sqrt((hh0.x-tr.lx)*(hh0.x-tr.lx)+(hh0.y-tr.ly)*(hh0.y-tr.ly));tr.lx=hh0.x;tr.ly=hh0.y;}}
@@ -132,10 +144,11 @@ if(ka>window.__kink.mx)window.__kink.mx=ka;if(ka>0.55){window.__kink.n++;if(tick
 if(window.__SOAK__&&tickN%3600===0){var am4=0;for(var ai4=0;ai4<snakes.length;ai4++)if(!snakes[ai4].isPlayer&&snakes[ai4].score>am4)am4=snakes[ai4].score;
 slog('[SOAK] t='+(tickN/60|0)+'s kinkN='+(window.__kink?window.__kink.n:0)+' maxK='+(window.__kink?window.__kink.mx.toFixed(2):0)+' score='+Math.floor(player.score)+' aiMax='+Math.floor(am4)+' deaths='+deaths+' foods='+foods.length);}
 if(window.__SOAK__&&tickN===39600){slog('[SOAK] final kinkN='+(window.__kink?window.__kink.n:0)+' maxK='+(window.__kink?window.__kink.mx.toFixed(2):0));}
-// T50: 加速豆——直行测基础速度→吃豆→测加速, 分数不得被加速消耗
-if(tickN===1780&&window.__BEANTEST__){player.grace=999999;player.aiT=99999;var bh=player.pts[0];player.angle=0;player.tAngle=0;player.aiA=0;player.boostT=0;window.__bx=bh.x;window.__by=bh.y;window.__bsc=player.score;}
-if(tickN===1810&&window.__BEANTEST__){var bh2=player.pts[0];window.__spd0=Math.sqrt((bh2.x-window.__bx)*(bh2.x-window.__bx)+(bh2.y-window.__by)*(bh2.y-window.__by))/30;foods.push({x:bh2.x+30,y:bh2.y,r:5,v:1,c:'#58a6ff',b:1});window.__bx=bh2.x;window.__by=bh2.y;}
-if(tickN===1845&&window.__BEANTEST__){var bh3=player.pts[0];window.__spd1=Math.sqrt((bh3.x-window.__bx)*(bh3.x-window.__bx)+(bh3.y-window.__by)*(bh3.y-window.__by))/35;slog('[TEST] bean spd0='+window.__spd0.toFixed(2)+' spd1='+window.__spd1.toFixed(2)+' ratio='+(window.__spd1/window.__spd0).toFixed(2)+' boostT='+((player.boostT||0)>tickN?1:0)+' scoreCost='+(window.__bsc-player.score).toFixed(1));}
+// T50: 加速豆进入库存(最多3个)，不自动启动；玩家手动释放后约1.45倍速度。
+if(tickN===1780&&window.__BEANTEST__){player.grace=999999;player.aiT=99999;var bh=player.pts[0];player.angle=0;player.tAngle=0;player.aiA=0;player.boostT=0;player.boostBeans=0;window.__bx=bh.x;window.__by=bh.y;window.__bsc=player.score;}
+if(tickN===1810&&window.__BEANTEST__){var bh2=player.pts[0];window.__spd0=Math.sqrt((bh2.x-window.__bx)*(bh2.x-window.__bx)+(bh2.y-window.__by)*(bh2.y-window.__by))/30;for(var bb9=0;bb9<4;bb9++)foods.push({x:bh2.x+18+bb9,y:bh2.y,r:5,v:1,c:'#58a6ff',b:1});}
+if(tickN===1822&&window.__BEANTEST__){window.__storedB=player.boostBeans;window.__idleB=(player.boostT||0)<=tickN?1:0;window.__usedB=useBoostBean(player)?1:0;var bhB=player.pts[0];window.__bx=bhB.x;window.__by=bhB.y;}
+if(tickN===1857&&window.__BEANTEST__){var bh3=player.pts[0];window.__spd1=Math.sqrt((bh3.x-window.__bx)*(bh3.x-window.__bx)+(bh3.y-window.__by)*(bh3.y-window.__by))/35;slog('[TEST] bean stored='+window.__storedB+' idle='+window.__idleB+' used='+window.__usedB+' left='+player.boostBeans+' spd0='+window.__spd0.toFixed(2)+' spd1='+window.__spd1.toFixed(2)+' ratio='+(window.__spd1/window.__spd0).toFixed(2)+' boostT='+((player.boostT||0)>tickN?1:0)+' scoreCost='+(window.__bsc-player.score).toFixed(1));}
 """
     g = src.replace('<body>', '<body><script>' + seed_js + 'window.__AUTOPILOT__=true;window.__FORCE_FB__=true;'
         'window.__EATTEST__=true;window.__AURATEST__=true;window.__HEADTEST__=true;'
@@ -201,7 +214,7 @@ def solo_tests():
     m = re.search(r'chainCap chain=(\d+)', joined)
     check('T31', '连杀奖励封顶(≤5级)', m and int(m.group(1)) <= 5, m.group(0) if m else '无日志')
     m1 = re.search(r'mush plus=(\d+)', joined);mm = re.search(r'mush mid drain=(\d+)', joined);m2 = re.search(r'mush end drain=(\d+)', joined)
-    check('T35', '蘑菇+500限时15秒后渐进恢复', m1 and int(m1.group(1)) == 500 and mm and 100 < int(mm.group(1)) < 500 and m2 and int(m2.group(1)) == 0,
+    check('T35', '蘑菇+200限时15秒后恢复', m1 and int(m1.group(1)) == 200 and mm and 0 < int(mm.group(1)) < 200 and m2 and int(m2.group(1)) == 0,
           ' / '.join(x.group(0) if x else '无日志' for x in [m1, mm, m2]))
     d1 = re.search(r'dieWithDrain drainAfterDeath=(\d+) mushs=(\d+)', joined)
     d2 = re.search(r'afterRevive alive=(\d) score=(\d+) drain=(\d+)', joined)
@@ -213,12 +226,13 @@ def solo_tests():
     check('T49', 'AI激进进食(不原地打转, 持续长大)',
           m and float(m.group(1)) > 0.24 and int(m.group(4)) >= 130 and int(m.group(3)) >= 55,
           m.group(0) if m else '无日志')
-    m = re.search(r'bean spd0=([\d.]+) spd1=([\d.]+) ratio=([\d.]+) boostT=(\d) scoreCost=(-?[\d.]+)', joined)
-    check('T50', '加速豆: 吃豆加速且不耗分数',
-          m and float(m.group(3)) > 1.35 and m.group(4) == '1' and float(m.group(5)) < 1.0,
+    m = re.search(r'bean stored=(\d+) idle=(\d) used=(\d) left=(\d+) spd0=([\d.]+) spd1=([\d.]+) ratio=([\d.]+) boostT=(\d) scoreCost=(-?[\d.]+)', joined)
+    check('T50', '加速豆: 最多存3个且手动释放约1.45倍加速',
+          m and m.group(1) == '3' and m.group(2) == '1' and m.group(3) == '1' and m.group(4) == '2'
+          and 1.25 < float(m.group(7)) < 1.60 and m.group(8) == '1' and float(m.group(9)) < 1.0,
           m.group(0) if m else '无日志')
-    m = re.search(r'saveLogBtn=(\d) boostBtnGone=(\d)', joined)
-    check('T50b', '阵亡弹窗有保存日志按钮/加速按钮已移除',
+    m = re.search(r'saveLogBtn=(\d) boostBtn=(\d)', joined)
+    check('T50b', '阵亡弹窗有保存日志按钮/右下角有加速库存按钮',
           m and m.group(1) == '1' and m.group(2) == '1',
           m.group(0) if m else '无日志')
     m = re.search(r'logBtn=(\d) noOverlap=(\d) mapPointer=(\S+)', joined)
@@ -230,6 +244,17 @@ def solo_tests():
           m.group(0) if m else '无日志')
     m = re.search(r'wallWatchdog=(\d)', joined)
     check('T59', '断线看门狗使用墙钟而非游戏tick', m and m.group(1) == '1',
+          m.group(0) if m else '无日志')
+    m = re.search(r'safeSpawnDeferred=(\d)', joined)
+    check('T60', '超长蛇拥挤地图无安全点时AI延迟出生', m and m.group(1) == '1',
+          m.group(0) if m else '无日志')
+    m = re.search(r'ultraRemote bodySP=([\d.]+) pts=(\d+) fullPairs=(\d+)', joined)
+    check('T61', '10000分远端蛇身体点/全量包压缩',
+          m and float(m.group(1)) >= 15 and int(m.group(2)) <= 3500 and int(m.group(3)) < 7000,
+          m.group(0) if m else '无日志')
+    m = re.search(r'aiAssist ratio=([\d.]+) boss=(\d) aggro=([\d.]+)', joined)
+    check('T62', '玩家10000分时Boss AI追至至少70%',
+          m and float(m.group(1)) >= 0.70 and m.group(2) == '1' and float(m.group(3)) >= 0.98,
           m.group(0) if m else '无日志')
 
 
@@ -268,6 +293,10 @@ def lan_soak_tests():
     check('T57', '从机蛇头跳动率(1000+/3000+档均<2%)',
           mJ1 and mJ3 and int(mJ1.group(1)) < int(mJ1.group(2))*0.02 and int(mJ3.group(1)) < int(mJ3.group(2))*0.02,
           ((mJ1.group(0) if mJ1 else '无1000档') + ' | ' + (mJ3.group(0) if mJ3 else '无3000档')))
+    mu = re.search(r'\[SOAKLAN\] ultra bodySP=([\d.]+) pts=(\d+) alive=(\d) clientAlive=(\d)', joined)
+    check('T63', '联机10000分Boss压缩同步且不突然撞死玩家',
+          mu and float(mu.group(1)) >= 15 and int(mu.group(2)) <= 3500 and mu.group(3) == '1' and mu.group(4) == '1',
+          mu.group(0) if mu else '无10000分档')
     m = re.search(r'\[SOAKLAN\] final snaps=(\d+) rebases=(\d+) gaps=(\d+) teleports=(\d+) dead=(\d) entered=(\d) kinkN=(\d+) maxK=([\d.]+) hostRemoteN=(\d+)', joined)
     check('T53', '联机12分钟长程(抖动): 不掉线/无瞬移/无锐角',
           m and len(errs) == 0 and m.group(5) == '0' and m.group(6) == '1'
@@ -348,6 +377,10 @@ def lan_tests():
           m.group(0) if m else '无日志')
     m = re.search(r'B rejoined entered=(\d) alive=(\d) name=(\S+)', joined)
     check('T48', '彻底断线后自动重连回到游戏', m and m.group(1) == '1' and m.group(2) == '1' and m.group(3) == '客机B',
+          m.group(0) if m else '无日志')
+    m = re.search(r'boostNet hostBeans=(\d+) hostActive=(\d) clientBeans=(\d+) clientActive=(\d)', joined)
+    check('T64', '联机从机手动释放加速豆由主机权威生效',
+          m and m.group(1) == '2' and m.group(2) == '1' and m.group(3) == '2' and m.group(4) == '1',
           m.group(0) if m else '无日志')
 
 def main():

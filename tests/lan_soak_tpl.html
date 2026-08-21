@@ -42,6 +42,14 @@ function step(){
     if(t>300&&!window.__s5b){window.__s5b=1;
       try{var aw2b=frames[0].contentWindow;var snb=aw2b.__G.snakes;for(var ib=0;ib<snb.length;ib++){snb[ib].score=3000;snb[ib].vlen=3000;}slog('[SIM] inflated 3000');
       var bwL=frames[1].contentWindow;var LL=bwL.__G.LAN;slog('[SOAKLAN] stage1000 jerk='+((LL.__jerkN||0))+'/'+(LL.__tickC||1)+' corr='+(LL.corrN||0)+' tp='+(LL.teleports||0));LL.__jerkN=0;LL.__tickC=0;}catch(e){slog('[SIM] inflate2 err '+e.message);}}
+    // 真实10000分联机压力: 构造覆盖完整物理弧长的Boss轨迹并强制全量同步。
+    // grace覆盖测试余程，验证淡入/重生保护蛇不会在玩家看清前成为碰撞墙。
+    if(t>600&&!window.__sUltra){window.__sUltra=1;
+      try{var au=frames[0].contentWindow;var su=au.__G.snakes[1],hh=su.pts[0];su.name='Boss10000';su.score=10000;su.vlen=10000;su.alive=true;su.respawn=0;su.grace=99999;su.trail=[];
+      var R=650;for(var ui=0;ui<17000;ui++){var ua=ui*3/R;su.trail.push({x:hh.x+R*(Math.cos(ua)-1),y:hh.y+R*Math.sin(ua)});}su.pts=[{x:hh.x,y:hh.y}];
+      // trail[1]从头向旧轨迹方向为向上，蛇头前进方向取反(向下)，避免人工注入首帧接缝锐角。
+      su.angle=-Math.PI/2;su.tAngle=su.angle;su.aiA=su.angle;su.aiT=99999;su.snapFull=true;
+      slog('[SIM] ultra10000 prepared trail='+su.trail.length);}catch(e){slog('[SIM] ultra err '+e.message);}}
     if(t>60&&t<720&&t%120<0.6&&!window['__lg'+(t/120|0)]){window['__lg'+(t/120|0)]=1;
       try{var bw=frames[1].contentWindow;var L=bw.__G.LAN;
       slog('[SOAKLAN] t='+(t|0)+'s snaps='+L.snapRecv+' rebases='+L.rebases+' gaps='+(L.gaps||0)+' teleports='+(L.teleports||0)+' dead='+(L.dead?1:0)+' bScore='+Math.floor(bw.__G.player.score)+' bAlive='+(bw.__G.player.alive?1:0));}catch(e){slog('[SIM] lg err '+e.message);}}
@@ -58,7 +66,9 @@ function step(){
           if(ka>maxK)maxK=ka;if(ka>0.55){kinkN++;if(kinkN<=8)slog('[LK] n='+s.name+' ki='+ki+' len='+pp.length+' ka='+ka.toFixed(2)+' predN='+(s.predN||0)+' A='+pp[ki-1].x.toFixed(1)+','+pp[ki-1].y.toFixed(1)+' B='+pp[ki].x.toFixed(1)+','+pp[ki].y.toFixed(1)+' C='+pp[ki+1].x.toFixed(1)+','+pp[ki+1].y.toFixed(1)+' tr='+s.trail.slice(0,8).map(function(q7){return Math.round(q7.x)+','+Math.round(q7.y);}).join(' '));}}}
         var aw3=frames[0].contentWindow;
         var L3=bw2.__G.LAN;
+        var ultraC=null;for(var uc=0;uc<sn2.length;uc++)if(sn2[uc].name==='Boss10000')ultraC=sn2[uc];
         slog('[SOAKLAN] stage3000 jerk='+(L3.__jerkN||0)+'/'+(L3.__tickC||1)+' corr='+(L3.corrN||0)+' tp='+(L3.teleports||0));
+        slog('[SOAKLAN] ultra bodySP='+(ultraC?(ultraC.bodySP||5):-1)+' pts='+(ultraC?ultraC.pts.length:-1)+' alive='+(ultraC&&ultraC.alive?1:0)+' clientAlive='+(bw2.__G.player.alive?1:0));
         slog('[SOAKLAN] final snaps='+L2.snapRecv+' rebases='+L2.rebases+' gaps='+(L2.gaps||0)+' teleports='+(L2.teleports||0)+' dead='+(L2.dead?1:0)+' entered='+(L2.entered?1:0)+' kinkN='+kinkN+' maxK='+maxK.toFixed(2)+' hostRemoteN='+Object.keys(aw3.__G.remotes).length+' bAlive='+(bw2.__G.player.alive?1:0));
       }catch(e){slog('[SIM] final err '+e.message);}
     }

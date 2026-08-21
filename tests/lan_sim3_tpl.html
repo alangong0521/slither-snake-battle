@@ -103,6 +103,14 @@ function step(){
       slog('[SIM] C ftween='+tw);
       slog('[SIM] B snaps='+frames[1].contentWindow.__G.LAN.snapRecv);
     }
+    // T64: 主机给客机B 3个加速库存，从机点右下角后主机权威扣1并启动加速。
+    if(t>10.8&&!window.__boostNet1){window.__boostNet1=1;
+      var awB=frames[0].contentWindow;var rb=awB.__G.remotes[1];if(rb){rb.alive=true;rb.grace=999;rb.snapFull=true;rb.boostBeans=3;rb.boostT=0;slog('[SIM] boostNet stocked');}}
+    if(t>11.4&&!window.__boostNet2){window.__boostNet2=1;
+      var bwB=frames[1].contentWindow;var btnB=bwB.document.getElementById('boostBtn');if(btnB)btnB.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));}
+    if(t>12.1&&!window.__boostNet3){window.__boostNet3=1;
+      var awC=frames[0].contentWindow,bwC=frames[1].contentWindow,rb2=awC.__G.remotes[1];
+      slog('[SIM] boostNet hostBeans='+(rb2?rb2.boostBeans:-1)+' hostActive='+(rb2&&rb2.boostT>awC.__G.tickN?1:0)+' clientBeans='+(bwC.__G.player.boostBeans||0)+' clientActive='+(bwC.__G.player.boostT>bwC.__G.tickN?1:0));}
     if(t>12.3&&!window.__s79){
       var bw4=frames[1].contentWindow;var rs0=bw4.__G.snakes[0];
       var mx=0,bad=0;if(rs0&&rs0.pts.length>6){var rEnd=rs0.pts.length-((rs0.__pile||0)+3);for(var ri=4;ri<rEnd;ri++){var dd=Math.hypot(rs0.pts[ri].x-rs0.pts[ri-1].x,rs0.pts[ri].y-rs0.pts[ri-1].y);var e2=Math.abs(dd-5);if(e2>mx)mx=e2;if(e2>3)bad++;}}

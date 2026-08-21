@@ -17,7 +17,7 @@ snake_apk/
 │                                    #   alias=snake 密码 snake2026/snake2026
 │                                    #   cert SHA-256=a70ec2fd…7481b6
 ├── tests/
-│   ├── run_tests.py                 # 发布前测试集（59 项，全绿才能发布）
+│   ├── run_tests.py                 # 发布前测试集（64 项，全绿才能发布）
 │   └── lan_sim3_tpl.html            # 三人联机仿真模板
 ├── docs/
 │   ├── TESTSUITE.md                 # Bug 档案（根因/修复/用例对照）+ 测试集说明

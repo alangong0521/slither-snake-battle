@@ -18,6 +18,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e1013;font-family:
 #map{position:fixed;left:calc(20px + env(safe-area-inset-left));bottom:calc(146px + env(safe-area-inset-bottom));width:100px;height:100px;border-radius:50%;border:1px solid #2a2f37;background:rgba(20,22,27,0.55);z-index:5;pointer-events:auto;touch-action:none}
 #joyKnob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.3)}
 #skillBtn{position:fixed;right:calc(110px + env(safe-area-inset-right));bottom:calc(36px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;border:1.5px solid #e3b341;background:rgba(227,179,65,0.15);color:#ffe08a;font-size:12px;font-family:inherit;z-index:6;touch-action:none}
+#boostBtn{position:fixed;right:calc(28px + env(safe-area-inset-right));bottom:calc(28px + env(safe-area-inset-bottom));width:68px;height:68px;border-radius:50%;border:1.5px solid #58a6ff;background:rgba(88,166,255,0.18);color:#c9e3ff;font-size:12px;font-family:inherit;z-index:6;touch-action:none;display:none}
 .ovl{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;background:rgba(10,11,14,0.82);z-index:10;text-align:center;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .ovl>*{flex-shrink:0}
 .ovl>*:first-child{margin-top:auto}
@@ -63,6 +64,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e1013;font-family:
 <button id="pauseBtn">暂停</button>
 <div class="lb" id="lb"></div>
 <canvas id="map" width="240" height="240"></canvas>
+<button id="boostBtn">加速×0</button>
 <button id="skillBtn" style="display:none">技能</button>
 <div id="joy"><div id="joyKnob"></div></div>
 <div class="ovl" id="ovl">
@@ -90,7 +92,7 @@ var AUTO=!!window.__AUTOPILOT__;
 function slog(m){if(logEl)logEl.textContent+=m+"\n";try{console.log(m);}catch(e){}}
 window.addEventListener('error',function(e){slog('[ERR] '+e.message+' @'+(e.lineno||0));});
 var C={text:'#f2f3f5',sub:'#9aa0a8',bg:'#0e1013',grid:'#8a919c',danger:'#ff7b72'};
-var VERSION='4.0';
+var VERSION='4.1';
 var SERIES=['#ff7b72','#3fb950','#d2a8ff','#9aa0a8','#58a6ff','#e3b341'];
 var ME='#58a6ff';
 var WORLD_R=2300,FOOD_N=170,AI_N=9,SP=5;
@@ -107,7 +109,7 @@ var PWC={mag:'#ffd700',shd:'#58a6ff',zm:'#d2a8ff',x5:'#3fb950',mush:'#ff9ecf'};
 var PWN={mag:'磁',shd:'盾',zm:'镜',x5:'×2',mush:'菇'};
 function spawnPower(){var p=randPos(200);powers.push({x:p.x,y:p.y,r:10,type:PWT[(Math.random()*PWT.length)|0]});}
 function applyPower(s,t){
-if(t==='mush'){s.score+=500;s.__mush=(s.__mush||0)+500;(s.mushs=s.mushs||[]).push({t:tickN+900,v:500});}
+if(t==='mush'){s.score+=200;s.__mush=(s.__mush||0)+200;(s.mushs=s.mushs||[]).push({t:tickN+900,v:200});}
 else if(t==='mag')s.magT=tickN+600;
 else if(t==='shd')s.shdT=tickN+480;
 else if(t==='zm')s.zmT=tickN+600;
@@ -130,23 +132,26 @@ function zoomOf(s){var z=Math.max(0.65,1-Math.max(0,s.score-26)*0.0012);if((s.zm
 var NAMES=['蛇王','大胃王','闪电','卷卷','小皮','奶糖','墨墨','豆豆','阿紫'];
 var UID=1;
 function mkSnake(name,color,isPlayer){
-var s={name:name,color:color,isPlayer:!!isPlayer,pts:[],trail:[],aggro:rnd(0.5,0.95),vlen:26,angle:rnd(0,Math.PI*2),tAngle:0,score:26,kills:0,alive:true,boost:false,grace:150,aiT:0,aiA:rnd(0,Math.PI*2),respawn:0,deadT:0,tseq:0,snapFull:true,uid:UID++};
+var s={name:name,color:color,isPlayer:!!isPlayer,pts:[],trail:[],aggro:rnd(0.5,0.95),vlen:26,angle:rnd(0,Math.PI*2),tAngle:0,score:26,kills:0,alive:true,boost:false,boostBeans:0,grace:150,aiT:0,aiA:rnd(0,Math.PI*2),respawn:0,deadT:0,tseq:0,snapFull:true,uid:UID++};
 place(s);return s;
 }
 function farFromHumans(x,y,d){
 for(var k=0;k<snakes.length;k++){var s=snakes[k];if((s.isPlayer||s.isHuman)&&s.alive&&s.pts.length){if(dist(x,y,s.pts[0].x,s.pts[0].y)<d)return false;}}
 return true;
 }
-function place(s){
+function place(s,safeOnly){
 var p=null;
-for(var i=0;i<50;i++){var c=randPos(500);if(clearOf(c.x,c.y,320)&&farFromHumans(c.x,c.y,1050)){p=c;break;}}
-if(!p){for(var i3=0;i3<50;i3++){var c2=randPos(600);if(clearOf(c2.x,c2.y,320)){p=c2;break;}}}
+for(var i=0;i<120;i++){var c=randPos(500);if(clearOf(c.x,c.y,360)&&farFromHumans(c.x,c.y,1050)){p=c;break;}}
+if(!p){for(var i3=0;i3<100;i3++){var c2=randPos(600);if(clearOf(c2.x,c2.y,360)){p=c2;break;}}}
+// 超长蛇挤满地图时，AI 宁可延迟重生也不能强行塞进玩家身体里。
+if(!p&&safeOnly)return false;
 if(!p)p=randPos(600);
 s.pts=[];var n=Math.floor(s.score);
 for(var i2=0;i2<n;i2++)s.pts.push({x:p.x-i2*SP*Math.cos(s.angle),y:p.y-i2*SP*Math.sin(s.angle)});
 s.trail=s.pts.map(function(q){return{x:q.x,y:q.y};});
 s.vlen=Math.floor(s.score);
 s.bornT=tickN;
+return true;
 }
 function norm(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;return a;}
 var AC=null,sfxOn=true,musOn=true,combo=0,comboT=0,prevPBoost=false;
@@ -262,7 +267,7 @@ var rs=remotes[id];
 if(!rs){rs=mkSnake(m.n||'玩家'+(id+1),m.c||'#ff7b72',false);rs.remote=true;rs.isHuman=true;snakes.push(rs);remotes[id]=rs;}
 else{rs.name=m.n||rs.name;rs.color=m.c||rs.color;rs.lastInT=tickN;
 // 重连hello(旧蛇还在且已死): 重置复活, 让掉线/重进的玩家立即回到游戏
-if(started&&!rs.alive){dbg('客机重连重置 id='+id);rs.score=26;rs.kills=0;rs.mushs=[];rs.mushDrain=0;rs.alive=true;rs.grace=160;rs.angle=rnd(0,6.28);rs.tAngle=rs.angle;rs.vlen=26;rs.pts.length=0;rs.trail.length=0;place(rs);rs.snapFull=true;}}
+if(started&&!rs.alive){dbg('客机重连重置 id='+id);rs.score=26;rs.kills=0;rs.mushs=[];rs.mushDrain=0;rs.boostBeans=0;rs.alive=true;rs.grace=180;rs.angle=rnd(0,6.28);rs.tAngle=rs.angle;rs.vlen=26;rs.pts.length=0;rs.trail.length=0;place(rs);rs.snapFull=true;}}
 LAN.sentSeq[id]={};
 fixColorConflicts();
 lanSendTo(id,{t:'you',i:snakes.indexOf(rs),u:rs.uid});
@@ -272,9 +277,10 @@ var li=$('lanInfo');if(li&&!started)li.textContent='已加入 '+Object.keys(remo
 else if(m.t==='you'&&LAN.mode===2){LAN.ownIdx=m.i;LAN.ownUid=m.u;dbg('入局 ownUid='+m.u+' idx='+m.i);}
 else if(m.t==='in'&&LAN.mode===1&&remotes[id]){if(remotes[id].lastInT===undefined)dbg('首个上行 id='+id+' tickN='+tickN);remotes[id].tAngle=m.a;remotes[id].boost=!!m.b;remotes[id].lastInT=tickN;}
 else if(m.t==='sk'&&LAN.mode===1&&remotes[id])activateSkill(remotes[id]);
+else if(m.t==='bt'&&LAN.mode===1&&remotes[id])useBoostBean(remotes[id]);
 else if(m.t==='rs'&&LAN.mode===1){if(m.u!==undefined){delete (LAN.sentSeq[id]||{})[m.u];}else LAN.sentSeq[id]={};}
 else if(m.t==='hb'&&LAN.mode===1&&remotes[id]){remotes[id].lastInT=tickN;}
-else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){dbg('客机请求重生 id='+id);var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.mushs=[];rs2.mushDrain=0;rs2.alive=true;rs2.grace=160;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
+else if(m.t==='rv'&&LAN.mode===1&&remotes[id]){dbg('客机请求重生 id='+id);var rs2=remotes[id];rs2.score=26;rs2.kills=0;rs2.mushs=[];rs2.mushDrain=0;rs2.boostBeans=0;rs2.alive=true;rs2.grace=180;rs2.angle=rnd(0,6.28);rs2.tAngle=rs2.angle;rs2.vlen=26;rs2.pts.length=0;rs2.trail.length=0;place(rs2);rs2.snapFull=true;}
 else if(m.t==='snap'&&LAN.mode===2){applySnap(m);}
 else if(m.t==='start'&&LAN.mode===2){clientEnter();}
 else if(m.t==='pz'){
@@ -311,13 +317,15 @@ if(s.snapFull||lw===undefined||lw>s.tseq||s.tseq-lw>s.trail.length){
 full=1;
 // 全量轨迹: 长度必须覆盖 身长xSP 弧长(vlen*0.9个点只够一半弧长, 曾导致客机尾部堆积→反复请求全量→重建风暴)
 var need=Math.min(s.trail.length,Math.ceil(s.vlen*SP/2.5)+40);
-for(var j=0;j<need;j++){tr.push(Math.round(s.trail[j].x));tr.push(Math.round(s.trail[j].y));}
+// 超长蛇全量包按轨迹跨度抽稀：仍覆盖相同物理弧长，10000分蛇包体缩至约1/3。
+var fullStep=s.vlen>=7000?3:(s.vlen>=2500?2:1);
+for(var j=0;j<need;j+=fullStep){tr.push(Math.round(s.trail[j].x));tr.push(Math.round(s.trail[j].y));}
 }else{
 var cnt=Math.min(s.tseq-lw,s.trail.length);
 for(var j2=0;j2<cnt;j2++){tr.push(Math.round(s.trail[j2].x));tr.push(Math.round(s.trail[j2].y));}
 }
 ss[s.uid]=s.tseq;
-sn.push({i:i,u:s.uid,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1:0),f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0,Math.max(0,(s.boostT||0)-tickN)]});
+sn.push({i:i,u:s.uid,n:s.name,c:s.color,s:Math.round(s.score),k:s.kills,a:s.alive?1:0,g:+s.angle.toFixed(2),b:(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1:0),f:full,hh:[Math.round(s.pts[0].x),Math.round(s.pts[0].y)],tr:tr,h:(s.isPlayer||s.isHuman)?1:0,e:[Math.max(0,(s.magT||0)-tickN),Math.max(0,(s.shdT||0)-tickN),Math.max(0,(s.zmT||0)-tickN),Math.max(0,(s.x5T||0)-tickN),Math.max(0,(s.fzT||0)-tickN),s.skillN||0,Math.max(0,(s.boostT||0)-tickN),s.boostBeans||0]});
 }
 var fd=null;
 var rp=rsnake&&rsnake.pts.length?rsnake.pts[0]:null;
@@ -348,7 +356,7 @@ for(var ci=0;ci<LAN.cSnakes.length;ci++){var cs0=LAN.cSnakes[ci];if(cs0&&cs0.uid
 var newArr=[];
 for(var i=0;i<m.sn.length;i++){var ms=m.sn[i];var ls=(ms.u!==undefined)?byUid[ms.u]:LAN.cSnakes[i];
 if(!ls){
-ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,predN:0,bornT:tickN};
+ls={name:ms.n,color:ms.c,isPlayer:false,pts:[],trail:[],aggro:0.3,vlen:ms.s,score:ms.s,kills:0,alive:!!ms.a,angle:ms.g,tAngle:ms.g,aiT:0,aiA:0,grace:0,respawn:0,deadT:0,boost:false,boostBeans:0,predN:0,bornT:tickN};
 // 本地无此蛇对象却收到增量(典型: 重连后旧会话快照先到): 先用蛇头占位防渲染崩溃, 并请求该蛇全量
 if(ms.hh){ls.trail.push({x:ms.hh[0],y:ms.hh[1]});ls.pts.push({x:ms.hh[0],y:ms.hh[1]});}
 if(!ms.f)lanSend({t:'rs',u:ms.u});
@@ -360,7 +368,7 @@ var isOwn=(LAN.ownUid!==undefined&&ms.u===LAN.ownUid)||(LAN.ownUid===undefined&&
 if(isOwn)LAN.ownIdx=i;
 var prevScore=ls.score;
 ls.name=ms.n;ls.color=ms.c;ls.kills=ms.k;ls.score=ms.s;ls.isHuman=!!ms.h;ls.boost=!!ms.b;
-if(ms.e){ls.magT=tickN+ms.e[0];ls.shdT=tickN+ms.e[1];ls.zmT=tickN+ms.e[2];ls.x5T=tickN+ms.e[3];ls.fzT=tickN+ms.e[4];ls.skillN=ms.e[5];if(ms.e.length>6)ls.boostT=tickN+ms.e[6];}
+if(ms.e){ls.magT=tickN+ms.e[0];ls.shdT=tickN+ms.e[1];ls.zmT=tickN+ms.e[2];ls.x5T=tickN+ms.e[3];ls.fzT=tickN+ms.e[4];ls.skillN=ms.e[5];if(ms.e.length>6)ls.boostT=tickN+ms.e[6];if(ms.e.length>7)ls.boostBeans=ms.e[7];}
 var wasAlive=ls.alive;
 ls.alive=!!ms.a;
 ls.authH=ms.hh;
@@ -438,7 +446,7 @@ function clientTick(){
 // 常驻心跳1Hz: 死亡观战/长暂停期间也保持上行, 防主机僵尸清理误踢(Java层另有5秒读超时)
 if(tickN%60===0){lanSend({t:'hb'});if(!LAN.__hbLogged){LAN.__hbLogged=1;dbg('客户端心跳启动 tickN='+tickN);}}
 if(tickN-comboT>90)combo=0;
-if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;
+var pba=((player.boost&&player.score>28)||(player.boostT||0)>tickN);if(pba&&!prevPBoost)sfxBoost();prevPBoost=pba;
 // 死亡后本地不再模拟移动(定格), 等主机快照/重生
 if(player.alive)moveSnake(player);
 // 自身蛇头平滑校正: 快照到达时算出的误差分摊到数帧渐进应用, 消除周期性回拽
@@ -450,7 +458,7 @@ for(var k=0;k<snakes.length;k++){var s=snakes[k];if(s===player||!s.alive||!s.pts
 var turn=0.13;
 s.angle+=Math.max(-turn,Math.min(turn,norm(s.tAngle-s.angle)));
 var zm=zoomOf(s);
-var sp=(3.0/zm)*(1+(1-zm)*0.4)*(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1.8:1);
+var sp=(3.0/zm)*(1+(1-zm)*0.4)*(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1.45:1);
 if((s.fzT||0)>tickN)sp*=1.25;
 var h=s.pts[0];
 h.x+=Math.cos(s.angle)*sp;h.y+=Math.sin(s.angle)*sp;
@@ -560,12 +568,31 @@ s.__cirT=tickN;s.__cx=h0.x;s.__cy=h0.y;}
 if(s.aiT<=0){s.aiT=6;aiThink(s);}
 s.tAngle=s.aiA;
 }
+// 后期对抗扶持：玩家/真人达到1000+后，选一条存活AI作为Boss，每秒最多作弊增长60分，
+// 目标为当前最强真人的70%。Boss持续积极出击并获得短续航加速，但不瞬间扩身，避免同步重建风暴。
+function assistAI(force){
+if(!force&&tickN%60!==0)return null;
+var humanMax=0;
+for(var hi=0;hi<snakes.length;hi++){var hs=snakes[hi];if(hs.alive&&(hs.isPlayer||hs.isHuman)&&hs.score>humanMax)humanMax=hs.score;}
+if(humanMax<1000)return null;
+var target=Math.floor(humanMax*0.70),boss=null;
+for(var ai6=0;ai6<snakes.length;ai6++){var as6=snakes[ai6];if(!as6.alive||as6.isPlayer||as6.isHuman||as6.remote)continue;if(!boss||as6.score>boss.score)boss=as6;}
+if(!boss)return null;
+boss.__boss=1;boss.aggro=0.99;boss.__brk=Math.max(boss.__brk||0,tickN+180);boss.boostT=Math.max(boss.boostT||0,tickN+120);boss.skillN=Math.max(boss.skillN||0,1);
+if(boss.score<target){var gain=Math.min(60,target-boss.score);boss.score+=gain;boss.__assist=(boss.__assist||0)+gain;}
+return boss;
+}
+function useBoostBean(s){
+if(!s||!s.alive||(s.boostBeans||0)<=0||(s.boostT||0)>tickN)return false;
+s.boostBeans--;s.boostT=tickN+180;
+return true;
+}
 function moveSnake(s){
 var h=s.pts[0];
 var turn=0.13;
 s.angle+=Math.max(-turn,Math.min(turn,norm(s.tAngle-s.angle)));
 var zm=zoomOf(s);
-var sp=(3.0/zm)*(1+(1-zm)*0.4)*(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1.8:1);
+var sp=(3.0/zm)*(1+(1-zm)*0.4)*(((s.boost&&s.score>28)||(s.boostT||0)>tickN)?1.45:1);
 if((s.fzT||0)>tickN)sp*=1.25;
 h.x+=Math.cos(s.angle)*sp;h.y+=Math.sin(s.angle)*sp;
 var dc=Math.hypot(h.x,h.y),lim=WORLD_R-rad(s);
@@ -587,28 +614,32 @@ if(tickN%15===0){var t2=s.pts[s.pts.length-1];spawnFood(t2.x+rnd(-4,4),t2.y+rnd(
 // 由蛇头轨迹按恒定弧长重建蛇身(主机与客机共用同一算法, 保证渲染一致)
 function rebuildBody(s){
 if(!s.trail.length)return;
-// 大蛇(>500)在客机上隔帧重建身体: 弧长遍历开销减半, 视觉无差别(头部照常每帧动)
 if(s.vlen===undefined)s.vlen=s.score;
 if(s.score>s.vlen){var gr=Math.max(0.35,(s.score-s.vlen)*0.03);s.vlen=Math.min(s.score,s.vlen+gr);}
 else if(s.score<s.vlen)s.vlen=Math.max(s.score,s.vlen-Math.max(0.6,(s.vlen-s.score)*0.05));
+// 从机不参与碰撞判定，远端大蛇可按相同物理弧长使用更疏的身体采样；曲线仍由轨迹插值，
+// 10000分远端蛇由约10000点降至约3333点，明显减轻每帧重建与Canvas路径开销。
+var bodySp=SP;
+if(LAN.mode===2&&!s.isPlayer){bodySp=s.vlen>=7000?15:(s.vlen>=2500?10:(s.vlen>=1000?7.5:SP));}
+s.bodySP=bodySp;
 var targetPx=Math.max(12,s.vlen)*SP;
 var pts=s.pts;
 if(!pts.length&&s.trail.length)pts.push({x:s.trail[0].x,y:s.trail[0].y});
 var dW=0,ti=0,pi=1;
 var ax=s.trail[0].x,ay=s.trail[0].y;
-while(pi*SP<=targetPx+0.001&&ti<s.trail.length-1){
+while(pi*bodySp<=targetPx+0.001&&ti<s.trail.length-1){
 var bx=s.trail[ti+1].x,by=s.trail[ti+1].y;
 var seg=Math.sqrt((bx-ax)*(bx-ax)+(by-ay)*(by-ay));
 if(seg<0.0001){ti++;continue;}
-var nd=pi*SP-dW;
+var nd=pi*bodySp-dW;
 if(seg>=nd){
 var t=nd/seg;
 ax=ax+(bx-ax)*t;ay=ay+(by-ay)*t;
 if(pts[pi]){pts[pi].x=ax;pts[pi].y=ay;}else pts.push({x:ax,y:ay});
-pi++;dW=(pi-1)*SP;
+pi++;dW=(pi-1)*bodySp;
 }else{dW+=seg;ax=bx;ay=by;ti++;}
 }
-var fd=targetPx-(pi-1)*SP;
+var fd=targetPx-(pi-1)*bodySp;
 if(fd>0.5&&ti<s.trail.length-1){
 var nd2=targetPx-dW;
 while(ti<s.trail.length-1){
@@ -622,7 +653,7 @@ pi++;break;
 }
 }
 var lt=s.trail[s.trail.length-1];
-var minLen=Math.max(12,Math.floor(s.vlen));
+var minLen=Math.max(12,Math.floor(targetPx/bodySp));
 s.__pile=Math.max(0,minLen-pi);
 while(pi<minLen){if(pts[pi]){pts[pi].x=lt.x;pts[pi].y=lt.y;}else pts.push({x:lt.x,y:lt.y});pi++;}
 while(pts.length>pi)pts.pop();
@@ -637,7 +668,9 @@ if(md2<130*130&&md2>1){var md=Math.sqrt(md2);mf.x+=mdx/md*4.5;mf.y+=mdy/md*4.5;}
 for(var i=foods.length-1;i>=0;i--){
 var f=foods[i];
 if(Math.abs(f.x-h.x)<r+4&&Math.abs(f.y-h.y)<r+4&&dist(h.x,h.y,f.x,f.y)<r+f.r){
-var __inc=f.v*(((s.x5T||0)>tickN)?2:1);s.score+=__inc;s.__eat=(s.__eat||0)+__inc;if(f.b){s.boostT=tickN+240;}foods.splice(i,1);
+var __inc=f.v*(((s.x5T||0)>tickN)?2:1);s.score+=__inc;s.__eat=(s.__eat||0)+__inc;
+if(f.b){if(s.isPlayer||s.isHuman||s.remote)s.boostBeans=Math.min(3,(s.boostBeans||0)+1);else s.boostT=tickN+180;}
+foods.splice(i,1);
 if(s.isPlayer){combo++;comboT=tickN;sfxEat(combo);}
 }
 }
@@ -652,7 +685,7 @@ var dst=Math.max(3,Math.floor(s.pts.length/150));
 for(var i=0;i<s.pts.length;i+=dst)spawnFood(s.pts[i].x+rnd(-6,6),s.pts[i].y+rnd(-6,6),2);
 s.magT=s.shdT=s.zmT=s.x5T=s.fzT=0;s.skillN=0;s.killChain=0;
 // 死亡即清账: 蘑菇待回收额/待到期效果必须清零, 否则重生后回收逻辑把分数持续钉死在26(吃多少扣多少)
-s.mushs=[];s.mushDrain=0;s.boostT=0;
+s.mushs=[];s.mushDrain=0;s.boostT=0;s.boostBeans=0;
 if(killer&&killer!==s){
 killer.kills++;
 if(tickN-(killer.lastKillT||-9999)<480){killer.killChain=Math.min(5,(killer.killChain||0)+1);killer.score+=50*killer.killChain;killer.__chain=(killer.__chain||0)+50*killer.killChain;}
@@ -696,7 +729,8 @@ if((s.shdT||0)>tickN)continue;
 var h=s.pts[0];
 for(var k2=0;k2<snakes.length;k2++){
 var o=snakes[k2];
-if(o===s||!o.alive)continue;
+// 新生/重生蛇保护期内双方互不构成身体墙，防止在拥挤超长局里淡入前就让玩家撞死。
+if(o===s||!o.alive||o.grace>0)continue;
 var oh=o.pts[0];
 if(dist(h.x,h.y,oh.x,oh.y)>o.pts.length*SP+60)continue;
 var rr=rad(s)+rad(o)*0.75;
@@ -720,11 +754,12 @@ return;
 tickN++;
 if(LAN.mode===2){clientTick();return;}
 if(tickN-comboT>90)combo=0;
-if(player){if(player.boost&&!prevPBoost)sfxBoost();prevPBoost=player.boost;}
+if(player){var pba2=((player.boost&&player.score>28)||(player.boostT||0)>tickN);if(pba2&&!prevPBoost)sfxBoost();prevPBoost=pba2;}
 for(var k=0;k<snakes.length;k++){
 var s=snakes[k];
 if(!s.alive){
-if(!s.isPlayer&&!s.remote&&s.respawn&&tickN>=s.respawn){s.score=Math.random()<0.25?Math.floor(rnd(90,180)):26;s.alive=true;s.grace=120;s.angle=rnd(0,6.28);s.respawn=0;s.color=aiColorFree();place(s);s.snapFull=true;}
+if(!s.isPlayer&&!s.remote&&s.respawn&&tickN>=s.respawn){s.score=Math.random()<0.25?Math.floor(rnd(90,180)):26;s.grace=180;s.angle=rnd(0,6.28);s.color=aiColorFree();
+if(place(s,true)){s.alive=true;s.respawn=0;s.snapFull=true;}else{s.alive=false;s.respawn=tickN+180;}}
 continue;
 }
 if(s.isPlayer){if(AUTO)steerAI(s);}else if(s.remote){}else steerAI(s);
@@ -732,6 +767,7 @@ moveSnake(s);eat(s);
 if(s.mushs&&s.mushs.length&&s.mushs[0].t<=tickN){s.mushDrain=(s.mushDrain||0)+s.mushs[0].v;s.mushs.shift();}
 if(s.mushDrain>0){var mdd=Math.min(s.mushDrain,3);if(s.score-mdd<26)mdd=Math.max(0,s.score-26);s.score-=mdd;s.mushDrain-=mdd;}
 }
+assistAI(false);
 collisions();
 if(player.alive)aliveTicks++;
 while(foods.length<FOOD_N)spawnFood();
@@ -859,7 +895,7 @@ var topSnake=null,topSc=-1;
 for(var tk=0;tk<snakes.length;tk++){var ts=snakes[tk];if(ts.alive&&ts.score>topSc){topSc=ts.score;topSnake=ts;}}
 for(var k=0;k<snakes.length;k++){var s=snakes[k];if(!s.alive)continue;
 var h=s.pts[0];if(!h)continue;
-if(dist(h.x,h.y,focus.x,focus.y)>(vw+vh)+s.pts.length*SP)continue;
+if(dist(h.x,h.y,focus.x,focus.y)>(vw+vh)+s.pts.length*(s.bodySP||SP))continue;
 var r=rad(s);
 var bornA=1;if(s.bornT!==undefined&&tickN-s.bornT<40){bornA=0.1+0.9*(tickN-s.bornT)/40;ctx.globalAlpha=bornA;}
 if(s.score>=3000&&s===topSnake){
@@ -878,7 +914,7 @@ for(var g2=0;g2<3;g2++){ctx.strokeStyle='hsla('+((hue0+g2*60)%360)+',90%,65%,'+(
 ctx.strokeStyle=s.color;ctx.lineWidth=r*1.7;
 // 渲染抽稀: 点间距仅5px, 屏幕间距<6px时人眼无差别; 按蛇长+缩放级别取步长, 大幅降低多蛇后期描边开销
 var rst=s.pts.length>1800?4:(s.pts.length>900?3:(s.pts.length>300?2:1));
-var rstZ=Math.ceil(6/(SP*zoom));if(rstZ>rst)rst=rstZ;
+var rsp=s.bodySP||SP;var rstZ=Math.ceil(6/(rsp*zoom));if(rstZ>rst)rst=rstZ;
 // 视口剔除: 视野外身段不进描边路径(大蛇横穿地图时省掉大半线段)
 var mx0=vx0-r*2,mx1=vx1+r*2,my0=vy0-r*2,my1=vy1+r*2,inSeg=false;
 var pp9=s.pts,n9=pp9.length;
@@ -952,6 +988,9 @@ if((player.fzT||0)>tickN)fx+=' 狂'+Math.ceil((player.fzT-tickN)/60);
 if((player.boostT||0)>tickN)fx+=' 速'+Math.ceil((player.boostT-tickN)/60);
 if((player.skillN||0)>0)fx+=' 技×'+player.skillN;
 $('hFx').textContent=fx;
+$('boostBtn').style.display=((player.boostBeans||0)>0||(player.boostT||0)>tickN)&&player.alive?'block':'none';
+$('boostBtn').textContent=(player.boostT||0)>tickN?'加速中':'加速×'+(player.boostBeans||0);
+$('boostBtn').style.opacity=(player.boostT||0)>tickN?'0.55':'1';
 $('skillBtn').style.display=((player.skillN||0)>0&&player.alive)?'block':'none';
 var arr=snakes.slice().sort(function(a,b){return b.score-a.score;});
 var html='<div class="lbt">排行榜</div>';
@@ -977,7 +1016,7 @@ try{navigator.clipboard.writeText(t);alert('无文件保存通道, 日志已复�
 }
 function revive(){
 if(LAN.mode===2){dbg('点击再来一局, 发送rv');lanSend({t:'rv'});$('ovl').style.display='none';ac();musStart();return;}
-player.score=26;player.kills=0;player.mushs=[];player.mushDrain=0;player.boostT=0;aliveTicks=0;player.alive=true;player.grace=160;player.boost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);player.snapFull=true;
+player.score=26;player.kills=0;player.mushs=[];player.mushDrain=0;player.boostT=0;player.boostBeans=0;aliveTicks=0;player.alive=true;player.grace=180;player.boost=false;combo=0;player.angle=rnd(0,6.28);player.tAngle=player.angle;place(player);player.snapFull=true;
 $('ovl').style.display='none';
 ac();musStart();sfxStart();
 }
@@ -1081,6 +1120,8 @@ $('cancelBtn').onclick=function(){o.style.display='none';paused=false;$('pauseBt
 function setTarget(cx,cy){if(!player||!player.alive)return;player.tAngle=Math.atan2(cy-H/2,cx-W/2);}
 cv.addEventListener('pointermove',function(e){setTarget(e.clientX,e.clientY);});
 $('skillBtn').addEventListener('pointerdown',function(e){e.preventDefault();if(!player||!player.alive)return;if(activateSkill(player)&&LAN.mode===2)lanSend({t:'sk'});});
+$('boostBtn').addEventListener('pointerdown',function(e){e.preventDefault();if(!player||!player.alive||(player.boostT||0)>tickN)return;
+if(LAN.mode===2)lanSend({t:'bt'});else useBoostBean(player);updateHUD();});
 cv.addEventListener('pointerdown',function(e){setTarget(e.clientX,e.clientY);});
 cv.addEventListener('contextmenu',function(e){e.preventDefault();});
 var joy=$('joy'),knob=$('joyKnob'),joyId=null;
